@@ -3,7 +3,7 @@
 //! This module defines the CLI structure using clap and routes commands
 //! to their appropriate handlers.
 
-use std::{ffi::OsStr, process::ExitStatus};
+use std::{collections::HashMap, ffi::OsStr, process::ExitStatus};
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_complete::ArgValueCompleter;
@@ -562,6 +562,41 @@ async fn run_package_manager_command(
             managed_update(packages, concurrency).await
         }
 
+        PackageManagerCommand::Outdated {
+            global: true,
+            ref packages,
+            long,
+            format,
+            recursive,
+            ref filter,
+            workspace_root,
+            prod,
+            dev,
+            no_optional,
+            compatible,
+            ref sort_by,
+            ref pass_through_args,
+        } => {
+            warn_unsupported_global_outdated_flags(
+                recursive,
+                filter,
+                workspace_root,
+                prod,
+                dev,
+                no_optional,
+                compatible,
+                sort_by.as_deref(),
+                pass_through_args.as_deref(),
+            );
+            crate::commands::env::outdated::execute(
+                packages,
+                long,
+                format,
+                DEFAULT_GLOBAL_INSTALL_CONCURRENCY,
+            )
+            .await
+        }
+
         // `pm list -g` lists vite-plus-managed globals, not the underlying PM's.
         PackageManagerCommand::Pm(vite_pm_cli::cli::PmCommands::List {
             global: true,
@@ -612,6 +647,43 @@ async fn managed_uninstall(packages: &[String], dry_run: bool) -> Result<ExitSta
     Ok(ExitStatus::default())
 }
 
+fn warn_unsupported_global_outdated_flags(
+    recursive: bool,
+    filters: &Option<Vec<String>>,
+    workspace_root: bool,
+    prod: bool,
+    dev: bool,
+    no_optional: bool,
+    compatible: bool,
+    sort_by: Option<&str>,
+    pass_through_args: Option<&[String]>,
+) {
+    if recursive {
+        output::warn("--recursive is ignored with managed global packages");
+    }
+    if filters.as_ref().is_some_and(|filters| !filters.is_empty()) {
+        output::warn("--filter is ignored with managed global packages");
+    }
+    if workspace_root {
+        output::warn("--workspace-root is ignored with managed global packages");
+    }
+    if prod || dev {
+        output::warn("--prod/--dev are ignored with managed global packages");
+    }
+    if no_optional {
+        output::warn("--no-optional is ignored with managed global packages");
+    }
+    if compatible {
+        output::warn("--compatible is ignored with managed global packages");
+    }
+    if sort_by.is_some() {
+        output::warn("--sort-by is ignored with managed global packages");
+    }
+    if pass_through_args.is_some_and(|args| !args.is_empty()) {
+        output::warn("pass-through arguments are ignored with managed global packages");
+    }
+}
+
 fn is_global_package_up_to_date(installed_version: &str, registry_version: &str) -> bool {
     installed_version.trim() == registry_version.trim()
 }
@@ -620,6 +692,7 @@ async fn managed_update(
     packages: &[String],
     concurrency: Option<usize>,
 ) -> Result<ExitStatus, Error> {
+    let concurrency = concurrency.unwrap_or(DEFAULT_GLOBAL_INSTALL_CONCURRENCY);
     let all_packages = if packages.is_empty() {
         let all = PackageMetadata::list_all().await?;
         if all.is_empty() {
@@ -635,10 +708,13 @@ async fn managed_update(
     let mut skipped = 0usize;
 
     if let Some(all) = all_packages {
+        let specs = all.iter().map(|metadata| metadata.name.clone()).collect::<Vec<_>>();
+        let latest_versions = latest_versions_by_spec(&specs, concurrency).await?;
+
         for metadata in all {
-            match global_install::latest_package_version(&metadata.name).await {
-                Ok(latest_version)
-                    if is_global_package_up_to_date(&metadata.version, &latest_version) =>
+            match latest_versions.get(&metadata.name) {
+                Some(Ok(latest_version))
+                    if is_global_package_up_to_date(&metadata.version, latest_version) =>
                 {
                     vite_shared::output::raw(&format!(
                         "{} is already up to date (v{}).",
@@ -646,10 +722,17 @@ async fn managed_update(
                     ));
                     skipped += 1;
                 }
-                Ok(_) => to_update.push(metadata.name.clone()),
-                Err(e) => {
+                Some(Ok(_)) => to_update.push(metadata.name.clone()),
+                Some(Err(e)) => {
                     vite_shared::output::raw_stderr(&format!(
                         "Could not check latest version for {}: {e}; updating anyway.",
+                        metadata.name
+                    ));
+                    to_update.push(metadata.name.clone());
+                }
+                None => {
+                    vite_shared::output::raw_stderr(&format!(
+                        "Could not check latest version for {}; updating anyway.",
                         metadata.name
                     ));
                     to_update.push(metadata.name.clone());
@@ -657,6 +740,9 @@ async fn managed_update(
             }
         }
     } else {
+        let mut specs = Vec::new();
+        let mut installed_packages = Vec::new();
+
         for package in packages {
             if global_install::is_local_package_spec(package) {
                 to_update.push(package.clone());
@@ -665,23 +751,37 @@ async fn managed_update(
 
             let (package_name, _) = global_install::parse_package_spec(package);
             if let Some(metadata) = PackageMetadata::load(&package_name).await? {
-                match global_install::latest_package_version(package).await {
-                    Ok(latest_version)
-                        if is_global_package_up_to_date(&metadata.version, &latest_version) =>
-                    {
-                        vite_shared::output::raw(&format!(
-                            "{} is already up to date (v{}).",
-                            package_name, metadata.version
-                        ));
-                        skipped += 1;
-                        continue;
-                    }
-                    Ok(_) => {}
-                    Err(e) => {
-                        vite_shared::output::raw_stderr(&format!(
-                            "Could not check latest version for {package}: {e}; updating anyway."
-                        ));
-                    }
+                specs.push(package.clone());
+                installed_packages.push((package.clone(), package_name, metadata.version));
+            } else {
+                to_update.push(package.clone());
+            }
+        }
+
+        let latest_versions = latest_versions_by_spec(&specs, concurrency).await?;
+
+        for (package, package_name, installed_version) in installed_packages {
+            match latest_versions.get(&package) {
+                Some(Ok(latest_version))
+                    if is_global_package_up_to_date(&installed_version, latest_version) =>
+                {
+                    vite_shared::output::raw(&format!(
+                        "{} is already up to date (v{}).",
+                        package_name, installed_version
+                    ));
+                    skipped += 1;
+                    continue;
+                }
+                Some(Ok(_)) => {}
+                Some(Err(e)) => {
+                    vite_shared::output::raw_stderr(&format!(
+                        "Could not check latest version for {package}: {e}; updating anyway."
+                    ));
+                }
+                None => {
+                    vite_shared::output::raw_stderr(&format!(
+                        "Could not check latest version for {package}; updating anyway."
+                    ));
                 }
             }
             to_update.push(package.clone());
@@ -696,14 +796,8 @@ async fn managed_update(
     }
 
     // Call reinstall logic
-    if let Err((package_name, error)) = global_install::install(
-        &to_update,
-        None,
-        false,
-        concurrency.unwrap_or(DEFAULT_GLOBAL_INSTALL_CONCURRENCY),
-        true,
-    )
-    .await
+    if let Err((package_name, error)) =
+        global_install::install(&to_update, None, false, concurrency, true).await
     {
         output::error(&format!(
             "Failed to update {}: {error}",
@@ -712,6 +806,19 @@ async fn managed_update(
         return Ok(exit_status(1));
     }
     Ok(ExitStatus::default())
+}
+
+async fn latest_versions_by_spec(
+    specs: &[String],
+    concurrency: usize,
+) -> Result<HashMap<String, Result<String, Error>>, Error> {
+    let versions =
+        crate::commands::env::registry::latest_package_versions(specs, concurrency).await?;
+    let mut latest_versions = HashMap::with_capacity(versions.len());
+    for version in versions {
+        latest_versions.insert(version.package_spec, version.version);
+    }
+    Ok(latest_versions)
 }
 
 /// Run the CLI command.
