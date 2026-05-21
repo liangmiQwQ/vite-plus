@@ -1,17 +1,13 @@
 //! Check managed global packages for newer registry versions.
 
-use std::{collections::HashMap, process::ExitStatus};
+use std::process::ExitStatus;
 
 use owo_colors::OwoColorize;
 use serde::Serialize;
 use vite_install::commands::outdated::Format;
 
-use super::{
-    global_install::parse_package_spec,
-    package_metadata::PackageMetadata,
-    registry::{self, PackageVersion},
-};
-use crate::error::Error;
+use super::{latest_versions_by_spec, parse_package_spec};
+use crate::{commands::env::package_metadata::PackageMetadata, error::Error};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,27 +38,27 @@ pub async fn execute(
     }
 
     let specs = installed.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
-    let versions = registry::latest_package_versions(&specs, concurrency).await?;
-    let mut latest_versions = HashMap::new();
+    let mut latest_versions = latest_versions_by_spec(&specs, concurrency).await?;
     let mut failed = false;
 
-    for PackageVersion { package_spec, version } in versions {
-        match version {
-            Ok(version) => {
-                latest_versions.insert(package_spec, version);
-            }
-            Err(error) => {
-                vite_shared::output::raw_stderr(&format!(
-                    "Could not check latest version for {package_spec}: {error}"
-                ));
-                failed = true;
-            }
+    for (package_spec, version) in &latest_versions {
+        if let Err(error) = version {
+            vite_shared::output::raw_stderr(&format!(
+                "Could not check latest version for {package_spec}: {error}"
+            ));
+            failed = true;
         }
     }
 
     let mut outdated = Vec::new();
     for package in installed {
-        let Some(latest) = latest_versions.remove(&package.name) else { continue };
+        let Some(version) = latest_versions.remove(&package.name) else {
+            continue;
+        };
+        let latest = match version {
+            Ok(version) => version,
+            Err(_) => continue,
+        };
         if package.version.trim() == latest.trim() {
             continue;
         }

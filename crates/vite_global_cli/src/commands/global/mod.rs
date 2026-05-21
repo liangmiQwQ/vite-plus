@@ -1,19 +1,25 @@
-//! npm registry queries for managed global packages.
+//! Managed global package utilities.
 
-use std::process::Stdio;
+use std::{collections::HashMap, process::Stdio};
 
 use futures::{StreamExt, stream::FuturesUnordered};
 use tokio::process::Command;
 use vite_path::{AbsolutePathBuf, current_dir};
 use vite_shared::format_path_prepended;
 
-use super::config::resolve_version;
-use crate::error::Error;
+use crate::{commands::env::config::resolve_version, error::Error};
+
+pub mod install;
+pub mod outdated;
+pub mod packages;
+
+/// Core shims that should not be overwritten by package binaries.
+pub(crate) const CORE_SHIMS: &[&str] = &["node", "npm", "npx", "vp"];
 
 #[derive(Debug)]
-pub(crate) struct PackageVersion {
-    pub package_spec: String,
-    pub version: Result<String, Error>,
+struct PackageVersion {
+    package_spec: String,
+    version: Result<String, Error>,
 }
 
 struct NpmRegistry {
@@ -60,7 +66,7 @@ impl NpmRegistry {
     }
 }
 
-pub(crate) async fn latest_package_versions(
+async fn latest_package_versions(
     package_specs: &[String],
     concurrency: usize,
 ) -> Result<Vec<PackageVersion>, Error> {
@@ -72,6 +78,7 @@ pub(crate) async fn latest_package_versions(
     let concurrency = concurrency.max(1);
     let mut package_specs = package_specs.iter();
     let mut versions = Vec::with_capacity(package_specs.len());
+    // Check packages in parallel
     let mut queries = FuturesUnordered::new();
 
     loop {
@@ -94,6 +101,49 @@ pub(crate) async fn latest_package_versions(
     }
 
     Ok(versions)
+}
+
+pub(crate) async fn latest_versions_by_spec(
+    specs: &[String],
+    concurrency: usize,
+) -> Result<HashMap<String, Result<String, Error>>, Error> {
+    let versions = latest_package_versions(specs, concurrency).await?;
+    let mut latest_versions = HashMap::with_capacity(versions.len());
+    for version in versions {
+        latest_versions.insert(version.package_spec, version.version);
+    }
+    Ok(latest_versions)
+}
+
+/// Return true for package specs that refer to local filesystem content.
+pub(crate) fn is_local_package_spec(spec: &str) -> bool {
+    spec == "."
+        || spec == ".."
+        || spec.starts_with("./")
+        || spec.starts_with("../")
+        || spec.starts_with('/')
+        || spec.starts_with("file:")
+        || (cfg!(windows)
+            && spec.len() >= 3
+            && spec.as_bytes()[1] == b':'
+            && (spec.as_bytes()[2] == b'\\' || spec.as_bytes()[2] == b'/'))
+}
+
+/// Parse package spec into name and optional version.
+pub(crate) fn parse_package_spec(spec: &str) -> (String, Option<String>) {
+    if spec.starts_with('@') {
+        if let Some(idx) = spec[1..].find('@') {
+            let idx = idx + 1;
+            return (spec[..idx].to_string(), Some(spec[idx + 1..].to_string()));
+        }
+        return (spec.to_string(), None);
+    }
+
+    if let Some(idx) = spec.find('@') {
+        return (spec[..idx].to_string(), Some(spec[idx + 1..].to_string()));
+    }
+
+    (spec.to_string(), None)
 }
 
 fn parse_npm_view_version(stdout: &[u8]) -> Result<String, Error> {

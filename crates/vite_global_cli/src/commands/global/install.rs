@@ -16,15 +16,20 @@ use vite_js_runtime::NodeProvider;
 use vite_path::{AbsolutePath, AbsolutePathBuf, current_dir};
 use vite_shared::{format_path_prepended, output};
 
-use super::{
-    bin_config::BinConfig,
-    config::{
-        get_bin_dir, get_node_modules_dir, get_packages_dir, get_tmp_dir, resolve_version,
-        resolve_version_alias,
+use crate::{
+    commands::{
+        env::{
+            bin_config::BinConfig,
+            config::{
+                get_bin_dir, get_node_modules_dir, get_packages_dir, get_tmp_dir, resolve_version,
+                resolve_version_alias,
+            },
+            package_metadata::PackageMetadata,
+        },
+        global::{CORE_SHIMS, parse_package_spec},
     },
-    package_metadata::PackageMetadata,
+    error::Error,
 };
-use crate::error::Error;
 
 struct Package<'a> {
     spec: &'a str,
@@ -443,40 +448,6 @@ pub async fn uninstall(package_name: &str, dry_run: bool) -> Result<(), Error> {
     Ok(())
 }
 
-/// Return true for package specs that refer to local filesystem content.
-pub(crate) fn is_local_package_spec(spec: &str) -> bool {
-    spec == "."
-        || spec == ".."
-        || spec.starts_with("./")
-        || spec.starts_with("../")
-        || spec.starts_with('/')
-        || spec.starts_with("file:")
-        || (cfg!(windows)
-            && spec.len() >= 3
-            && spec.as_bytes()[1] == b':'
-            && (spec.as_bytes()[2] == b'\\' || spec.as_bytes()[2] == b'/'))
-}
-
-/// Parse package spec into name and optional version.
-pub(crate) fn parse_package_spec(spec: &str) -> (String, Option<String>) {
-    // Handle scoped packages: @scope/name@version
-    if spec.starts_with('@') {
-        // Find the second @ for version
-        if let Some(idx) = spec[1..].find('@') {
-            let idx = idx + 1; // Adjust for the skipped first char
-            return (spec[..idx].to_string(), Some(spec[idx + 1..].to_string()));
-        }
-        return (spec.to_string(), None);
-    }
-
-    // Handle regular packages: name@version
-    if let Some(idx) = spec.find('@') {
-        return (spec[..idx].to_string(), Some(spec[idx + 1..].to_string()));
-    }
-
-    (spec.to_string(), None)
-}
-
 /// Binary info extracted from package.json.
 struct BinaryInfo {
     /// Binary name (the command users will run)
@@ -551,9 +522,6 @@ fn is_javascript_binary(path: &AbsolutePath) -> bool {
 
     false
 }
-
-/// Core shims that should not be overwritten by package binaries.
-pub(crate) const CORE_SHIMS: &[&str] = &["node", "npm", "npx", "vp"];
 
 /// Create a shim for a package binary.
 ///
@@ -657,6 +625,7 @@ async fn remove_package_shim(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::global::is_local_package_spec;
 
     /// RAII guard that sets `VP_TRAMPOLINE_PATH` to a fake binary on creation
     /// and clears it on drop. Ensures cleanup even on test panics.

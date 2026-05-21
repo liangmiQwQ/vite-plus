@@ -12,11 +12,13 @@ use super::{
     cache::{self, ResolveCache, ResolveCacheEntry},
     exec, is_core_shim_tool,
 };
-use crate::commands::env::{
-    bin_config::{BinConfig, BinSource},
-    config::{self, ShimMode},
-    global_install::CORE_SHIMS,
-    package_metadata::PackageMetadata,
+use crate::commands::{
+    env::{
+        bin_config::{BinConfig, BinSource},
+        config::{self, ShimMode},
+        package_metadata::PackageMetadata,
+    },
+    global::CORE_SHIMS,
 };
 
 /// Environment variable used to prevent infinite recursion in shim dispatch.
