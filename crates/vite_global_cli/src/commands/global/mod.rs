@@ -1,8 +1,9 @@
 //! Managed global package utilities.
 
-use std::{collections::HashMap, process::Stdio};
+use std::{collections::HashMap, io::IsTerminal, process::Stdio, time::Duration};
 
 use futures::{StreamExt, stream::FuturesUnordered};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use tokio::process::Command;
 use vite_path::{AbsolutePathBuf, current_dir};
 use vite_shared::format_path_prepended;
@@ -66,19 +67,31 @@ impl NpmRegistry {
     }
 }
 
-async fn latest_package_versions(
-    package_specs: &[String],
+pub(crate) async fn latest_package_versions(
+    specs: &[String],
     concurrency: usize,
-) -> Result<Vec<PackageVersion>, Error> {
-    if package_specs.is_empty() {
-        return Ok(Vec::new());
+) -> Result<HashMap<String, Result<String, Error>>, Error> {
+    if specs.is_empty() {
+        return Ok(HashMap::new());
     }
 
     let registry = NpmRegistry::resolve().await?;
     let concurrency = concurrency.max(1);
-    let mut package_specs = package_specs.iter();
-    let mut versions = Vec::with_capacity(package_specs.len());
-    // Check packages in parallel
+    let mut package_specs = specs.iter();
+    let mut versions = HashMap::with_capacity(specs.len());
+
+    let progress = ProgressBar::new(specs.len() as u64);
+    if std::io::stderr().is_terminal() && std::env::var_os("CI").is_none() {
+        let style = ProgressStyle::with_template("{spinner:.cyan} {msg} ({pos}/{len})")
+            .unwrap_or_else(|_| ProgressStyle::default_spinner())
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
+        progress.set_style(style);
+        progress.set_message("Checking latest package versions");
+        progress.enable_steady_tick(Duration::from_millis(80));
+    } else {
+        progress.set_draw_target(ProgressDrawTarget::hidden());
+    }
+
     let mut queries = FuturesUnordered::new();
 
     loop {
@@ -96,23 +109,13 @@ async fn latest_package_versions(
         }
 
         if let Some(version) = queries.next().await {
-            versions.push(version);
+            progress.inc(1);
+            versions.insert(version.package_spec, version.version);
         }
     }
+    progress.finish_and_clear();
 
     Ok(versions)
-}
-
-pub(crate) async fn latest_versions_by_spec(
-    specs: &[String],
-    concurrency: usize,
-) -> Result<HashMap<String, Result<String, Error>>, Error> {
-    let versions = latest_package_versions(specs, concurrency).await?;
-    let mut latest_versions = HashMap::with_capacity(versions.len());
-    for version in versions {
-        latest_versions.insert(version.package_spec, version.version);
-    }
-    Ok(latest_versions)
 }
 
 /// Return true for package specs that refer to local filesystem content.

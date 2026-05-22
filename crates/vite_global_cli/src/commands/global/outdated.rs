@@ -9,7 +9,7 @@ use owo_colors::OwoColorize;
 use serde::Serialize;
 use vite_install::commands::outdated::Format;
 
-use super::{latest_versions_by_spec, parse_package_spec};
+use super::{latest_package_versions, parse_package_spec};
 use crate::{
     commands::env::{
         config::{get_node_modules_dir, get_packages_dir},
@@ -64,7 +64,7 @@ pub async fn execute(
     let specs = installed.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
 
     let mut latest_versions_map = HashMap::new();
-    for (package_spec, version) in latest_versions_by_spec(&specs, concurrency).await? {
+    for (package_spec, version) in latest_package_versions(&specs, concurrency).await? {
         match version {
             Ok(version) => latest_versions_map.insert(package_spec, version),
             Err(error) => {

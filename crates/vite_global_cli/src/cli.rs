@@ -652,7 +652,7 @@ async fn managed_update(
 
     if let Some(all) = all_packages {
         let specs = all.iter().map(|metadata| metadata.name.clone()).collect::<Vec<_>>();
-        let latest_versions = global::latest_versions_by_spec(&specs, concurrency).await?;
+        let latest_versions = global::latest_package_versions(&specs, concurrency).await?;
 
         for metadata in all {
             match latest_versions.get(&metadata.name) {
@@ -701,7 +701,7 @@ async fn managed_update(
             }
         }
 
-        let latest_versions = global::latest_versions_by_spec(&specs, concurrency * 3).await?;
+        let latest_versions = global::latest_package_versions(&specs, concurrency * 3).await?;
 
         for (package, package_name, installed_version) in installed_packages {
             match latest_versions.get(&package) {
