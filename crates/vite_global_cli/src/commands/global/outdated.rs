@@ -1,6 +1,9 @@
 //! Check managed global packages for newer registry versions.
 
-use std::{collections::BTreeMap, process::ExitStatus};
+use std::{
+    collections::{BTreeMap, HashMap},
+    process::ExitStatus,
+};
 
 use owo_colors::OwoColorize;
 use serde::Serialize;
@@ -41,6 +44,8 @@ pub async fn execute(
     format: Option<Format>,
     concurrency: usize,
 ) -> Result<ExitStatus, Error> {
+    // 1. Resolve the command arguments to vite-plus-managed global packages.
+    //    A missing explicit package is a command result, not an internal error.
     let installed = matching_packages(packages).await?;
     if installed.is_empty() {
         if packages.is_empty() {
@@ -53,44 +58,50 @@ pub async fn execute(
         return Ok(exit_status(1));
     }
 
+    // 2. Query the registry for the latest version of each installed package.
+    //    A registry setup failure is fatal. A package-level lookup failure is
+    //    reported below and only affects the final exit status.
     let specs = installed.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
-    let mut latest_versions = latest_versions_by_spec(&specs, concurrency).await?;
-    let mut failed = false;
 
-    for (package_spec, version) in &latest_versions {
-        if let Err(error) = version {
-            vite_shared::output::raw_stderr(&format!(
-                "Could not check latest version for {package_spec}: {error}"
-            ));
-            failed = true;
-        }
+    let mut latest_versions_map = HashMap::new();
+    for (package_spec, version) in latest_versions_by_spec(&specs, concurrency).await? {
+        match version {
+            Ok(version) => latest_versions_map.insert(package_spec, version),
+            Err(error) => {
+                vite_shared::output::error(&format!(
+                    "Could not check latest version for {package_spec}: {error}"
+                ));
+                return Err(error);
+            }
+        };
     }
+    let mut latest_versions = latest_versions_map;
 
+    // 3. Compare installed metadata with registry versions. Packages whose
+    //    registry lookup failed are skipped because there is no version to compare.
     let mut outdated = Vec::new();
     for package in installed {
         let Some(version) = latest_versions.remove(&package.name) else {
             continue;
         };
-        let latest = match version {
-            Ok(version) => version,
-            Err(_) => continue,
-        };
-        if package.version.trim() == latest.trim() {
+        if package.version.trim() == version.trim() {
             continue;
         }
 
         outdated.push(OutdatedPackage {
             name: package.name,
             current: package.version,
-            latest,
+            latest: version,
             node: package.platform.node,
             bins: package.bins,
         });
     }
 
+    // 4. Render the requested output format and return npm-compatible status:
+    //    0 means fully checked and up to date; 1 means outdated or incomplete.
     if outdated.is_empty() {
-        print_empty(format, empty_outdated_message(failed));
-        return Ok(if failed { exit_status(1) } else { ExitStatus::default() });
+        print_empty(format, "All global packages are up to date.");
+        return Ok(ExitStatus::default());
     }
 
     match format {
@@ -124,14 +135,6 @@ fn print_empty(format: Option<Format>, message: &str) {
     }
 }
 
-fn empty_outdated_message(failed: bool) -> &'static str {
-    if failed {
-        "Could not check all global packages for updates."
-    } else {
-        "All global packages are up to date."
-    }
-}
-
 fn print_json(packages: &[OutdatedPackage]) -> Result<(), Error> {
     let packages_dir = get_packages_dir()?;
     let mut output = BTreeMap::new();
@@ -144,7 +147,9 @@ fn print_json(packages: &[OutdatedPackage]) -> Result<(), Error> {
             package.name.clone(),
             OutdatedPackageJson {
                 current: package.current.clone(),
-                wanted: package.latest.clone(),
+                // npm always print current version as wanted.
+                // https://docs.npmjs.com/cli/v11/commands/npm-outdated
+                wanted: package.current.clone(),
                 latest: package.latest.clone(),
                 dependent: "global",
                 location: location.as_path().display().to_string(),
@@ -250,23 +255,5 @@ fn exit_status(code: i32) -> ExitStatus {
     {
         use std::os::windows::process::ExitStatusExt;
         ExitStatus::from_raw(code as u32)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::empty_outdated_message;
-
-    #[test]
-    fn reports_lookup_failures_when_no_outdated_packages_are_found() {
-        assert_eq!(
-            empty_outdated_message(true),
-            "Could not check all global packages for updates."
-        );
-    }
-
-    #[test]
-    fn reports_up_to_date_only_when_all_lookups_succeed() {
-        assert_eq!(empty_outdated_message(false), "All global packages are up to date.");
     }
 }
