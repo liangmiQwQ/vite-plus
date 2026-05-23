@@ -627,114 +627,50 @@ async fn managed_uninstall(packages: &[String], dry_run: bool) -> Result<ExitSta
     Ok(ExitStatus::default())
 }
 
-fn is_global_package_up_to_date(installed_version: &str, registry_version: &str) -> bool {
-    installed_version.trim() == registry_version.trim()
-}
-
 async fn managed_update(
     packages: &[String],
     concurrency: Option<usize>,
 ) -> Result<ExitStatus, Error> {
     let concurrency = concurrency.unwrap_or(DEFAULT_GLOBAL_INSTALL_CONCURRENCY);
-    let all_packages = if packages.is_empty() {
+    let mut to_update: Vec<String> = Vec::new();
+
+    let packages = if packages.is_empty() {
         let all = PackageMetadata::list_all().await?;
         if all.is_empty() {
             vite_shared::output::raw("No global packages installed.");
             return Ok(ExitStatus::default());
         }
-        Some(all)
-    } else {
+
         None
-    };
-
-    let mut to_update: Vec<String> = Vec::new();
-    let mut skipped = 0usize;
-
-    if let Some(all) = all_packages {
-        let specs = all.iter().map(|metadata| metadata.name.clone()).collect::<Vec<_>>();
-        let latest_versions = global::latest_package_versions(&specs, concurrency).await?;
-
-        for metadata in all {
-            match latest_versions.get(&metadata.name) {
-                Some(Ok(latest_version))
-                    if is_global_package_up_to_date(&metadata.version, latest_version) =>
-                {
-                    vite_shared::output::raw(&format!(
-                        "{} is already up to date (v{}).",
-                        metadata.name, metadata.version
-                    ));
-                    skipped += 1;
-                }
-                Some(Ok(_)) => to_update.push(metadata.name.clone()),
-                Some(Err(e)) => {
-                    vite_shared::output::raw_stderr(&format!(
-                        "Could not check latest version for {}: {e}; updating anyway.",
-                        metadata.name
-                    ));
-                    to_update.push(metadata.name.clone());
-                }
-                None => {
-                    vite_shared::output::raw_stderr(&format!(
-                        "Could not check latest version for {}; updating anyway.",
-                        metadata.name
-                    ));
-                    to_update.push(metadata.name.clone());
-                }
-            }
-        }
     } else {
-        let mut specs = Vec::new();
-        let mut installed_packages = Vec::new();
+        let mut managed_specs = Vec::new();
 
         for package in packages {
+            // Always update local packages
             if global::is_local_package_spec(package) {
                 to_update.push(package.clone());
                 continue;
             }
 
             let (package_name, _) = global::parse_package_spec(package);
-            if let Some(metadata) = PackageMetadata::load(&package_name).await? {
-                specs.push(package.clone());
-                installed_packages.push((package.clone(), package_name, metadata.version));
+            if PackageMetadata::load(&package_name).await?.is_some() {
+                managed_specs.push(package.clone());
             } else {
                 to_update.push(package.clone());
             }
         }
 
-        let latest_versions = global::latest_package_versions(&specs, concurrency * 3).await?;
-
-        for (package, package_name, installed_version) in installed_packages {
-            match latest_versions.get(&package) {
-                Some(Ok(latest_version))
-                    if is_global_package_up_to_date(&installed_version, latest_version) =>
-                {
-                    vite_shared::output::raw(&format!(
-                        "{} is already up to date (v{}).",
-                        package_name, installed_version
-                    ));
-                    skipped += 1;
-                    continue;
-                }
-                Some(Ok(_)) => {}
-                Some(Err(e)) => {
-                    vite_shared::output::raw_stderr(&format!(
-                        "Could not check latest version for {package}: {e}; updating anyway."
-                    ));
-                }
-                None => {
-                    vite_shared::output::raw_stderr(&format!(
-                        "Could not check latest version for {package}; updating anyway."
-                    ));
-                }
-            }
-            to_update.push(package.clone());
-        }
-    }
+        Some(managed_specs)
+    };
+    to_update.extend(
+        global::outdated::get_outdated_packages(packages.as_deref(), concurrency * 3)
+            .await?
+            .into_iter()
+            .map(|package| package.name),
+    );
 
     if to_update.is_empty() {
-        if skipped > 0 {
-            vite_shared::output::raw("All global packages are up to date.");
-        }
+        vite_shared::output::raw("All global packages are up to date.");
         return Ok(ExitStatus::default());
     }
 
@@ -993,19 +929,9 @@ pub fn try_parse_args_from_with_options(
 #[cfg(test)]
 mod tests {
     use super::{
-        has_flag_before_terminator, is_global_package_up_to_date, should_force_global_delegate,
+        has_flag_before_terminator, should_force_global_delegate,
         should_suppress_header_for_subcommand,
     };
-
-    #[test]
-    fn skips_global_update_when_registry_and_node_versions_match() {
-        assert!(is_global_package_up_to_date("5.9.3", "5.9.3"));
-    }
-
-    #[test]
-    fn updates_global_package_when_registry_version_differs_from_installed_version() {
-        assert!(!is_global_package_up_to_date("5.9.2", "5.9.3"));
-    }
 
     #[test]
     fn detects_flag_before_option_terminator() {

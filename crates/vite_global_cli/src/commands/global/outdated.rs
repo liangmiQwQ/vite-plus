@@ -18,16 +18,17 @@ use crate::{
     error::Error,
 };
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct OutdatedPackage {
-    name: String,
-    current: String,
-    latest: String,
+#[derive(Debug)]
+pub struct OutdatedPackage {
+    pub name: String,
+    pub current: String,
+    pub latest: String,
     node: String,
     bins: Vec<String>,
 }
 
+/// For json output in `vp outdated` command
+/// Use `npm outdated --json`'s data structure
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct OutdatedPackageJson {
@@ -38,30 +39,36 @@ struct OutdatedPackageJson {
     location: String,
 }
 
-pub async fn execute(
-    packages: &[String],
-    long: bool,
-    format: Option<Format>,
+pub async fn get_outdated_packages(
+    packages: Option<&[String]>,
     concurrency: usize,
-) -> Result<ExitStatus, Error> {
+) -> Result<Vec<OutdatedPackage>, Error> {
     // 1. Resolve the command arguments to vite-plus-managed global packages.
     //    A missing explicit package is a command result, not an internal error.
-    let installed = matching_packages(packages).await?;
-    if installed.is_empty() {
-        if packages.is_empty() {
-            print_empty(format, "No global packages installed.");
-            return Ok(ExitStatus::default());
+    let installed = if let Some(packages) = packages {
+        let mut installed = Vec::new();
+        for package in packages {
+            let (package_name, _) = parse_package_spec(package);
+            if let Some(metadata) = PackageMetadata::load(&package_name).await? {
+                installed.push((metadata, Some(package.clone())));
+            }
         }
+        installed
+    } else {
+        PackageMetadata::list_all().await?.into_iter().map(|package| (package, None)).collect()
+    };
 
-        let names = packages.join(", ");
-        print_empty(format, &format!("No matching global packages installed: {names}"));
-        return Ok(exit_status(1));
+    if installed.is_empty() {
+        return Ok(Vec::new());
     }
 
-    // 2. Query the registry for the latest version of each installed package.
+    // 2. Query the registry for the latest version of each matching package.
     //    A registry setup failure is fatal. A package-level lookup failure is
-    //    reported below and only affects the final exit status.
-    let specs = installed.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
+    //    returned as an error because there is no version to compare.
+    let specs = installed
+        .iter()
+        .map(|(package, spec)| spec.clone().unwrap_or_else(|| package.name.clone()))
+        .collect::<Vec<_>>();
 
     let mut latest_versions_map = HashMap::new();
     for (package_spec, version) in latest_package_versions(&specs, concurrency).await? {
@@ -80,8 +87,9 @@ pub async fn execute(
     // 3. Compare installed metadata with registry versions. Packages whose
     //    registry lookup failed are skipped because there is no version to compare.
     let mut outdated = Vec::new();
-    for package in installed {
-        let Some(version) = latest_versions.remove(&package.name) else {
+    for (package, spec) in installed {
+        let key = spec.unwrap_or_else(|| package.name.clone());
+        let Some(version) = latest_versions.remove(&key) else {
             continue;
         };
         if package.version.trim() == version.trim() {
@@ -97,10 +105,23 @@ pub async fn execute(
         });
     }
 
-    // 4. Render the requested output format and return npm-compatible status:
-    //    0 means fully checked and up to date; 1 means outdated or incomplete.
+    Ok(outdated)
+}
+
+pub async fn execute(
+    packages: &[String],
+    long: bool,
+    format: Option<Format>,
+    concurrency: usize,
+) -> Result<ExitStatus, Error> {
+    let outdated = get_outdated_packages(Some(packages), concurrency).await?;
+
+    // Exit code 0 means fully checked and up to date; 1 means outdated or incomplete.
+    // To follow other pms' behavior, we do not print message there.
     if outdated.is_empty() {
-        print_empty(format, "All global packages are up to date.");
+        if let Some(Format::Json) = format {
+            vite_shared::output::raw("{}");
+        }
         return Ok(ExitStatus::default());
     }
 
@@ -111,28 +132,6 @@ pub async fn execute(
     }
 
     Ok(exit_status(1))
-}
-
-async fn matching_packages(packages: &[String]) -> Result<Vec<PackageMetadata>, Error> {
-    if packages.is_empty() {
-        return PackageMetadata::list_all().await;
-    }
-
-    let mut installed = Vec::new();
-    for package in packages {
-        let (package_name, _) = parse_package_spec(package);
-        if let Some(metadata) = PackageMetadata::load(&package_name).await? {
-            installed.push(metadata);
-        }
-    }
-    Ok(installed)
-}
-
-fn print_empty(format: Option<Format>, message: &str) {
-    match format {
-        Some(Format::Json) => println!("{{}}"),
-        _ => println!("{message}"),
-    }
 }
 
 fn print_json(packages: &[OutdatedPackage]) -> Result<(), Error> {
@@ -149,7 +148,7 @@ fn print_json(packages: &[OutdatedPackage]) -> Result<(), Error> {
                 current: package.current.clone(),
                 // npm always print current version as wanted.
                 // https://docs.npmjs.com/cli/v11/commands/npm-outdated
-                wanted: package.current.clone(),
+                wanted: package.latest.clone(),
                 latest: package.latest.clone(),
                 dependent: "global",
                 location: location.as_path().display().to_string(),
