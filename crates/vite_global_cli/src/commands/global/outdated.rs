@@ -75,9 +75,6 @@ pub async fn get_outdated_packages(
         match version {
             Ok(version) => latest_versions_map.insert(package_spec, version),
             Err(error) => {
-                vite_shared::output::error(&format!(
-                    "Could not check latest version for {package_spec}: {error}"
-                ));
                 return Err(error);
             }
         };
@@ -114,13 +111,24 @@ pub async fn execute(
     format: Option<Format>,
     concurrency: usize,
 ) -> Result<ExitStatus, Error> {
-    let outdated = get_outdated_packages(Some(packages), concurrency).await?;
+    let outdated = match get_outdated_packages(Some(packages), concurrency).await {
+        Ok(outdated) => outdated,
+        Err(error) => {
+            if let Some(Format::Json) = format {
+                vite_shared::output::raw("{}");
+            } else {
+                vite_shared::output::error(&format!("Could not get outdated packages: {error}"));
+            }
+            return Err(error);
+        }
+    };
 
     // Exit code 0 means fully checked and up to date; 1 means outdated or incomplete.
-    // To follow other pms' behavior, we do not print message there.
     if outdated.is_empty() {
         if let Some(Format::Json) = format {
             vite_shared::output::raw("{}");
+        } else {
+            vite_shared::output::info("All global packages are up to date.");
         }
         return Ok(ExitStatus::default());
     }
@@ -146,8 +154,6 @@ fn print_json(packages: &[OutdatedPackage]) -> Result<(), Error> {
             package.name.clone(),
             OutdatedPackageJson {
                 current: package.current.clone(),
-                // npm always print current version as wanted.
-                // https://docs.npmjs.com/cli/v11/commands/npm-outdated
                 wanted: package.latest.clone(),
                 latest: package.latest.clone(),
                 dependent: "global",
