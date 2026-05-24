@@ -663,10 +663,14 @@ async fn managed_update(
         Some(managed_specs)
     };
     to_update.extend(
-        global::outdated::get_outdated_packages(&packages.unwrap_or(Vec::new()), concurrency * 3)
-            .await?
-            .into_iter()
-            .map(|package| package.name),
+        global::outdated::get_outdated_packages(
+            &packages.unwrap_or(Vec::new()),
+            concurrency * 3,
+            true,
+        )
+        .await?
+        .into_iter()
+        .map(|package| package.name),
     );
 
     if to_update.is_empty() {

@@ -42,6 +42,7 @@ struct OutdatedPackageJson {
 pub async fn get_outdated_packages(
     packages: &[String],
     concurrency: usize,
+    error_on_fail: bool,
 ) -> Result<Vec<OutdatedPackage>, Error> {
     // 1. Resolve the command arguments to vite-plus-managed global packages.
     //    A missing explicit package is a command result, not an internal error.
@@ -73,11 +74,15 @@ pub async fn get_outdated_packages(
     let mut latest_versions_map = HashMap::new();
     for (package_spec, version) in latest_package_versions(&specs, concurrency).await? {
         match version {
-            Ok(version) => latest_versions_map.insert(package_spec, version),
-            Err(error) => {
-                return Err(error);
+            Ok(version) => {
+                latest_versions_map.insert(package_spec, version);
             }
-        };
+            Err(error) => {
+                if error_on_fail {
+                    return Err(error);
+                }
+            }
+        }
     }
     let mut latest_versions = latest_versions_map;
 
@@ -111,7 +116,7 @@ pub async fn execute(
     format: Option<Format>,
     concurrency: usize,
 ) -> Result<ExitStatus, Error> {
-    let outdated = match get_outdated_packages(packages, concurrency).await {
+    let outdated = match get_outdated_packages(packages, concurrency, false).await {
         Ok(outdated) => outdated,
         Err(error) => {
             if let Some(Format::Json) = format {
