@@ -23,6 +23,7 @@ pub struct OutdatedPackage {
     pub name: String,
     pub current: String,
     pub latest: String,
+    pub spec: Option<String>,
     node: String,
     bins: Vec<String>,
 }
@@ -90,8 +91,9 @@ pub async fn get_outdated_packages(
     //    registry lookup failed are skipped because there is no version to compare.
     let mut outdated = Vec::new();
     for (package, spec) in installed {
-        let key = spec.unwrap_or_else(|| package.name.clone());
-        let Some(version) = latest_versions.remove(&key) else {
+        let default_key = package.name.clone();
+        let key = spec.as_deref().unwrap_or(&default_key);
+        let Some(version) = latest_versions.remove(key) else {
             continue;
         };
         if package.version.trim() == version.trim() {
@@ -102,6 +104,7 @@ pub async fn get_outdated_packages(
             name: package.name,
             current: package.version,
             latest: version,
+            spec,
             node: package.platform.node,
             bins: package.bins,
         });

@@ -670,7 +670,7 @@ async fn managed_update(
         )
         .await?
         .into_iter()
-        .map(|package| package.name),
+        .map(|package| package.spec.unwrap_or(package.name)),
     );
 
     if to_update.is_empty() {
