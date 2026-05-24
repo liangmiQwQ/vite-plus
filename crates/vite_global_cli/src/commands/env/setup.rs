@@ -542,7 +542,7 @@ unset __vp_bin
 vp() {
     if [ "$1" = "env" ] && [ "$2" = "use" ]; then
         case " $* " in *" -h "*|*" --help "*) command vp "$@"; return; esac
-        __vp_out="$(VP_ENV_USE_EVAL_ENABLE=1 command vp "$@")" || return $?
+        __vp_out="$(VP_ENV_USE_EVAL_ENABLE=1 VP_SHELL=sh command vp "$@")" || return $?
         eval "$__vp_out"
     else
         command vp "$@"
@@ -579,7 +579,8 @@ function vp
             command vp $argv; return
         end
         set -lx VP_ENV_USE_EVAL_ENABLE 1
-        set -l __vp_out (env FISH_VERSION=$FISH_VERSION __VP_BIN__/vp $argv); or return $status
+        set -lx VP_SHELL fish
+        set -l __vp_out (command vp $argv); or return $status
         eval (string join ';' $__vp_out)
     else
         command vp $argv
@@ -611,7 +612,7 @@ def --env --wrapped vp [...args: string@"nu-complete vp"] {
             ^vp ...$args
             return
         }
-        let out = (with-env { VP_ENV_USE_EVAL_ENABLE: "1", VP_SHELL_NU: "1" } {
+        let out = (with-env { VP_ENV_USE_EVAL_ENABLE: "1", VP_SHELL: "nu" } {
             ^vp ...$args
         })
         let lines = ($out | lines)
@@ -674,7 +675,7 @@ function vp {
             & (Join-Path $__vp_bin "vp") @args; return
         }
         $env:VP_ENV_USE_EVAL_ENABLE = "1"
-        $env:VP_SHELL_PWSH = "1"
+        $env:VP_SHELL = "pwsh"
         $output = & (Join-Path $__vp_bin "vp") @args 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) {
                 Write-Host $_.Exception.Message
@@ -683,7 +684,7 @@ function vp {
             }
         }
         Remove-Item Env:VP_ENV_USE_EVAL_ENABLE -ErrorAction SilentlyContinue
-        Remove-Item Env:VP_SHELL_PWSH -ErrorAction SilentlyContinue
+        Remove-Item Env:VP_SHELL -ErrorAction SilentlyContinue
         if ($LASTEXITCODE -eq 0 -and $output) {
             Invoke-Expression ($output -join "`n")
         }
@@ -897,10 +898,6 @@ mod tests {
             nu_content.contains("VP_COMPLETE=fish"),
             "env.nu should use dynamic Fish completion delegation"
         );
-        assert!(
-            nu_content.contains("VP_SHELL_NU"),
-            "env.nu should use VP_SHELL_NU explicit marker instead of inherited NU_VERSION"
-        );
         assert!(nu_content.contains("load-env"), "env.nu should use load-env to apply exports");
     }
 
@@ -1085,10 +1082,6 @@ mod tests {
         assert!(
             fish_content.contains("\"$argv[2]\" = \"use\""),
             "env.fish should check for 'use' subcommand"
-        );
-        assert!(
-            fish_content.contains("/vp $argv"),
-            "env.fish should use absolute path to vp for passthrough"
         );
     }
 
