@@ -40,12 +40,12 @@ struct OutdatedPackageJson {
 }
 
 pub async fn get_outdated_packages(
-    packages: Option<&[String]>,
+    packages: &[String],
     concurrency: usize,
 ) -> Result<Vec<OutdatedPackage>, Error> {
     // 1. Resolve the command arguments to vite-plus-managed global packages.
     //    A missing explicit package is a command result, not an internal error.
-    let installed = if let Some(packages) = packages {
+    let installed = if !packages.is_empty() {
         let mut installed = Vec::new();
         for package in packages {
             let (package_name, _) = parse_package_spec(package);
@@ -111,7 +111,7 @@ pub async fn execute(
     format: Option<Format>,
     concurrency: usize,
 ) -> Result<ExitStatus, Error> {
-    let outdated = match get_outdated_packages(Some(packages), concurrency).await {
+    let outdated = match get_outdated_packages(packages, concurrency).await {
         Ok(outdated) => outdated,
         Err(error) => {
             if let Some(Format::Json) = format {
