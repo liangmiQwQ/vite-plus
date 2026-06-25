@@ -1,12 +1,5 @@
 [1]> vp lint src # extends rules are preserved when a file override adds Vue rules
 
-  × eslint(no-console): Unexpected console statement.
-   ╭─[src/example.js:1:1]
- 1 │ console.log();
-   · ───────────
-   ╰────
-  help: Delete this console statement.
-
   × vue(no-export-in-script-setup): <script setup>` cannot contain ES module exports.
    ╭─[src/example.vue:8:16]
  7 │ 
@@ -29,6 +22,13 @@
  6 │ console.log();
    · ───────────
  7 │ 
+   ╰────
+  help: Delete this console statement.
+
+  × eslint(no-console): Unexpected console statement.
+   ╭─[src/example.js:1:1]
+ 1 │ console.log();
+   · ───────────
    ╰────
   help: Delete this console statement.
 
