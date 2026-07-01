@@ -423,3 +423,4 @@ Options:
   -h, --help             Print help
 
 Documentation: https://viteplus.dev/guide/upgrade
+
