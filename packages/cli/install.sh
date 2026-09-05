@@ -301,7 +301,45 @@ resolve_bridge_commit_version() {
   printf '0.0.0-commit.%s' "$sha"
 }
 
+is_windows_uname() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolution_home_dir() {
+  if is_windows_uname; then
+    printf '%s\n' "${USERPROFILE:-$HOME}"
+  else
+    printf '%s\n' "${HOME:-$USERPROFILE}"
+  fi
+}
+
+# Released setup-vp versions add ~/.vite-plus/bin to the GitHub Actions or
+# GitLab CI/CD PATH. They do this after the installer exits. Use the monolithic
+# layout until setup-vp declares support for VP_DUMP_DIRS.
+enable_setup_vp_legacy_compatibility() {
+  if [ "${GITHUB_ACTION_REPOSITORY:-}" != "voidzero-dev/setup-vp" ]; then
+    [ "${GITLAB_CI:-}" = "true" ] || return 0
+    [ -n "${SETUP_VP_SETUP_REF:-}" ] || return 0
+  fi
+  [ "${VP_VPDIRS_AWARE:-}" != "1" ] || return 0
+  [ -z "${VP_HOME:-}" ] || return 0
+  [ -z "${VP_BIN_DIR:-}" ] || return 0
+  [ -z "${VP_DATA_DIR:-}" ] || return 0
+  [ -z "${VP_CACHE_DIR:-}" ] || return 0
+
+  local resolution_home
+  resolution_home="$(resolution_home_dir)"
+  [ -n "$resolution_home" ] || error "Vite+ could not resolve the user home directory."
+  VP_HOME="$resolution_home/.vite-plus"
+  export VP_HOME
+}
+
 main() (
+  enable_setup_vp_legacy_compatibility
+
   if [ -n "$PR_VERSION" ] && [ -n "$LOCAL_TGZ" ]; then
     error "VP_PR_VERSION and VP_LOCAL_TGZ cannot be used together"
   fi

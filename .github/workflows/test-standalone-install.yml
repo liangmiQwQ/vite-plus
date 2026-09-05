@@ -53,8 +53,11 @@ jobs:
         # single-root tree.
         run: echo "VP_HOME=$HOME/.vite-plus" >> $GITHUB_ENV
 
+      - name: Check bootstrap handoff
+        run: bash .github/scripts/test-install-bootstrap.sh
+
       - name: Run install.sh
-        run: cat packages/cli/install.sh | bash
+        run: cat packages/cli/install.sh | VP_LEGACY_INSTALLER_URL="file://$PWD/packages/cli/install-legacy.sh" bash
 
       - name: Verify installation
         working-directory: ${{ runner.temp }}
@@ -336,9 +339,7 @@ jobs:
           OUTPUT=$(mktemp)
           VP_LOCAL_TGZ="$FAKE_TGZ" VP_VERSION=local-test bash packages/cli/install.sh | tee "$OUTPUT"
 
-          grep -F "Install locations:" "$OUTPUT"
-          grep -F "Data directory: ~/.local/share/vite-plus" "$OUTPUT"
-          grep -F "Bin directory:  ~/.local/share/vite-plus/bin" "$OUTPUT"
+          grep -F "Vite+ setup complete." "$OUTPUT"
 
           test ! -d "$FRESH/.vite-plus"
           test -e "$FRESH/.local/share/vite-plus/current"
@@ -460,7 +461,7 @@ jobs:
         # Do not set VP_HOME. A pre-VpDirs release must select the monolithic
         # ~/.vite-plus root.
         run: |
-          cat packages/cli/install.sh | bash | tee install-output.txt
+          cat packages/cli/install.sh | VP_LEGACY_INSTALLER_URL="file://$PWD/packages/cli/install-legacy.sh" bash | tee install-output.txt
           grep -F "does not support the split directory layout" install-output.txt
 
       - name: Verify monolithic layout
@@ -567,7 +568,7 @@ jobs:
 
       - name: Run install.sh
         run: |
-          output=$(cat packages/cli/install.sh | bash 2>&1) || {
+          output=$(cat packages/cli/install.sh | VP_LEGACY_INSTALLER_URL="file://$PWD/packages/cli/install-legacy.sh" bash 2>&1) || {
             echo "$output"
             echo "Install script exited with non-zero status"
             exit 1
@@ -612,7 +613,7 @@ jobs:
               ls -al ~/
               apt-get update && apt-get install -y curl ca-certificates
               export VP_HOME=\"\$HOME/.vite-plus\"
-              cat /workspace/packages/cli/install.sh | bash
+              cat /workspace/packages/cli/install.sh | VP_LEGACY_INSTALLER_URL=file:///workspace/packages/cli/install-legacy.sh bash
               if [ -f ~/.profile ]; then
                 source ~/.profile
               elif [ -f ~/.bashrc ]; then
@@ -672,7 +673,7 @@ jobs:
               # libstdc++: required by unofficial-builds Node.js musl binary
               apk add --no-cache bash curl ca-certificates libstdc++
               export VP_HOME=\"\$HOME/.vite-plus\"
-              cat /workspace/packages/cli/install.sh | bash
+              cat /workspace/packages/cli/install.sh | VP_LEGACY_INSTALLER_URL=file:///workspace/packages/cli/install-legacy.sh bash
               export PATH=\"\$HOME/.vite-plus/bin:\$PATH\"
 
               vp --version
@@ -730,7 +731,7 @@ jobs:
               # libstdc++ is needed by unofficial-builds Node.js musl binary
               apk add --no-cache bash curl ca-certificates libstdc++
               export VP_HOME=\"\$HOME/.vite-plus\"
-              cat /workspace/packages/cli/install.sh | bash
+              cat /workspace/packages/cli/install.sh | VP_LEGACY_INSTALLER_URL=file:///workspace/packages/cli/install-legacy.sh bash
               export PATH=\"\$HOME/.vite-plus/bin:\$PATH\"
 
               vp --version
@@ -792,6 +793,10 @@ jobs:
             exit 1
           }
 
+      - name: Check bootstrap handoff
+        shell: powershell
+        run: ./.github/scripts/test-install-bootstrap.ps1
+
       - name: Run install.ps1
         shell: powershell
         run: |
@@ -799,6 +804,9 @@ jobs:
 
       - name: Run install.ps1 via irm simulation (catches BOM issues)
         shell: powershell
+        # Piped installers cannot locate a sibling script; use this PR's legacy implementation.
+        env:
+          VP_LEGACY_INSTALLER_URL: https://raw.githubusercontent.com/${{ github.event.pull_request.head.repo.full_name || github.repository }}/${{ github.event.pull_request.head.sha || github.sha }}/packages/cli/install-legacy.ps1
         run: |
           $ErrorActionPreference = "Stop"
           Get-Content ./packages/cli/install.ps1 -Raw | Invoke-Expression
@@ -962,6 +970,9 @@ jobs:
 
       - name: Run install.ps1 via iex under PowerShell 7.6
         shell: pwsh
+        # Piped installers cannot locate a sibling script; use this PR's legacy implementation.
+        env:
+          VP_LEGACY_INSTALLER_URL: https://raw.githubusercontent.com/${{ github.event.pull_request.head.repo.full_name || github.repository }}/${{ github.event.pull_request.head.sha || github.sha }}/packages/cli/install-legacy.ps1
         run: |
           & $env:PWSH76 -NoProfile -Command "Get-Content ./packages/cli/install.ps1 -Raw | Invoke-Expression"
 
@@ -1333,6 +1344,8 @@ jobs:
             $payload,
             $true
           )
+          # This fixture represents an installed payload, not a first-launch installer.
+          [System.IO.File]::WriteAllText((Join-Path $payloadBin ".vp-setup-complete"), "")
           $pointer = "vite-plus-shim-v1`nlayout=split`ndata=$data`ncache=$cache`n"
           [System.IO.File]::WriteAllText((Join-Path $bin "vp.shim"), $pointer)
 

@@ -147,7 +147,9 @@ async fn run(source: &Path) -> Result<(), Error> {
 
     // 3. Run setup in this process. Spawning the unmarked binary here would reenter self-setup.
     tokio::fs::create_dir_all(&dirs.bin).await?;
-    setup::execute_for_binary(binary.as_path(), true, false).await?;
+    // Declining management must preserve foreign executables in a shared bin directory.
+    let refresh = node_manager != NodeManager::SystemFirst;
+    setup::execute_for_binary(binary.as_path(), refresh, false).await?;
     if !in_place {
         let name = version_dir
             .as_path()

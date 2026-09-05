@@ -182,7 +182,40 @@ function Get-PlatformSuffix {
     return $Platform
 }
 
+function Get-UserHomeDir {
+    if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        return $env:USERPROFILE
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:HOME)) {
+        return $env:HOME
+    }
+    return [Environment]::GetFolderPath('UserProfile')
+}
+
+# Released setup-vp versions add %USERPROFILE%\.vite-plus\bin to the GitHub
+# Actions PATH. They do this after the installer exits. Use the monolithic
+# layout until setup-vp declares support for VP_DUMP_DIRS.
+function Enable-SetupVpLegacyCompatibility {
+    if ($env:GITHUB_ACTION_REPOSITORY -cne "voidzero-dev/setup-vp") {
+        return
+    }
+    if ($env:VP_VPDIRS_AWARE -eq "1") {
+        return
+    }
+    if ($env:VP_HOME -or $env:VP_BIN_DIR -or $env:VP_DATA_DIR -or $env:VP_CACHE_DIR) {
+        return
+    }
+
+    $userHome = Get-UserHomeDir
+    if ([string]::IsNullOrWhiteSpace($userHome)) {
+        Write-Error-Exit "Vite+ could not resolve the user home directory."
+    }
+    $env:VP_HOME = Join-Path $userHome ".vite-plus"
+}
+
 function Main {
+    Enable-SetupVpLegacyCompatibility
+
     if ($PrVersion -and $LocalTgz) {
         Write-Error-Exit "VP_PR_VERSION and VP_LOCAL_TGZ cannot be used together"
     }
@@ -296,12 +329,17 @@ function Test-SelfSetupSupport {
 
 function Invoke-LegacyInstaller {
     param([string]$BinarySource)
+    $global:LASTEXITCODE = 0
     $legacyScript = if ($InstallerDirectory) { Join-Path $InstallerDirectory 'install-legacy.ps1' }
     if ($legacyScript -and (Test-Path -LiteralPath $legacyScript -PathType Leaf)) {
         & $legacyScript -BinarySource $BinarySource -ResolvedVersion $ViteVersion -PreviewRef $PrVersion
     } else {
         $response = Invoke-WebRequest -Uri $LegacyInstallerUrl -UseBasicParsing
         & ([scriptblock]::Create($response.Content)) -BinarySource $BinarySource -ResolvedVersion $ViteVersion -PreviewRef $PrVersion
+    }
+    # A child script's exit only returns to this bootstrap, so forward its failure.
+    if ($LASTEXITCODE -ne 0) {
+        Exit-Installer -Code $LASTEXITCODE
     }
 }
 

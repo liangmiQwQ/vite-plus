@@ -21,7 +21,7 @@ if ($args.Count -eq 0) {
     exit 0
 }
 if ($env:VP_SELF_SETUP_SUPPORT_CHECK -ne '1') { exit 99 }
-if ($scenario -in @('legacy', 'pr')) { Write-Output 'Usage: vp [COMMAND]' }
+if ($scenario -in @('legacy', 'legacy-failure', 'pr')) { Write-Output 'Usage: vp [COMMAND]' }
 else { Write-Output 'vite-plus-self-setup-v1' }
 exit 0
 '@ | Set-Content -LiteralPath "$testRoot/package/binary.ps1"
@@ -29,6 +29,7 @@ exit 0
 param($BinarySource, $ResolvedVersion, $PreviewRef)
 if (-not [System.IO.Path]::IsPathRooted($BinarySource) -or -not (Test-Path -LiteralPath $BinarySource)) { throw 'Invalid payload path' }
 @($ResolvedVersion, $PreviewRef) | Set-Content -LiteralPath "$testRoot/legacy"
+if ($scenario -eq 'legacy-failure') { exit 42 }
 '@ | Set-Content -LiteralPath "$testRoot/scripts/install-legacy.ps1"
 & "$env:SystemRoot\System32\tar.exe" -czf "$testRoot/payload.tgz" -C $testRoot package
 Assert ($LASTEXITCODE -eq 0) 'Could not create fixture'
@@ -61,7 +62,7 @@ function Invoke-InstallHandoff {
 }
 
 try {
-    foreach ($scenario in @('supported', 'legacy', 'failure', 'pr')) {
+    foreach ($scenario in @('supported', 'legacy', 'legacy-failure', 'failure', 'pr')) {
         $script:Requests = New-Object 'System.Collections.Generic.List[string]'
         $script:ExitCode = 0
         $script:PackageMetadata = $null
@@ -77,9 +78,9 @@ try {
                 Main
             }
         } catch {
-            if ($scenario -ne 'failure' -or -not (Test-IsInstallStopException $_)) { throw }
+            if ($scenario -notin @('failure', 'legacy-failure') -or -not (Test-IsInstallStopException $_)) { throw }
         }
-        $expectedExit = if ($scenario -eq 'failure') { 42 } else { 0 }
+        $expectedExit = if ($scenario -in @('failure', 'legacy-failure')) { 42 } else { 0 }
         Assert ($script:ExitCode -eq $expectedExit) 'Binary exit code was lost'
         $usesBinary = $scenario -in @('supported', 'failure')
         Assert ((Test-Path -LiteralPath "$testRoot/binary-invoked") -eq $usesBinary) 'Incorrect binary invocation'

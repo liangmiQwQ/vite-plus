@@ -26,7 +26,7 @@ if [ "$#" -eq 0 ]; then
 fi
 test "${VP_SELF_SETUP_SUPPORT_CHECK:-}" = 1 || exit 99
 case "$scenario" in
-  legacy|pr) printf 'Usage: vp [COMMAND]\n' ;;
+  legacy|piped-legacy|pr) printf 'Usage: vp [COMMAND]\n' ;;
   *) printf 'vite-plus-self-setup-v1\n' ;;
 esac
 BINARY
@@ -39,13 +39,14 @@ fixture_sha=0123456789012345678901234567890123456789
 curl() {
   printf '%s\n' "$*" >> "$test_root/requests"
   case "$*" in
+    *file://*) command curl "$@" ;;
     *-fsSIL*) printf 'x-commit-key: voidzero-dev:vite-plus:%s\r\n' "$fixture_sha" ;;
     *'https://custom.example/vite-plus/'*) printf '{"version":"0.2.9"}\n' ;;
     *) cp "$test_root/payload.tgz" "${@: -1}" ;;
   esac
 }
 
-for scenario in supported legacy failure pr; do
+for scenario in supported legacy piped-legacy failure pr; do
   export scenario
   : > "$test_root/requests"
   rm -f "$test_root/legacy" "$test_root/binary-invoked"
@@ -56,6 +57,10 @@ for scenario in supported legacy failure pr; do
     LOCAL_TGZ="" LOCAL_BINARY="" PR_VERSION="" PACKAGE_METADATA=""
     NPM_REGISTRY=https://custom.example
     INSTALLER_PATH="$test_root/scripts/install.sh"
+    if [ "$scenario" = piped-legacy ]; then
+      INSTALLER_PATH=""
+      LEGACY_INSTALLER_URL="file://$test_root/scripts/install-legacy.sh"
+    fi
     if [ "$scenario" = pr ]; then PR_VERSION=2406; fi
     if [ "$scenario" = supported ]; then export VP_SELF_SETUP_SUPPORT_CHECK=original; fi
     main
@@ -72,7 +77,7 @@ for scenario in supported legacy failure pr; do
     supported|failure)
       test -f "$test_root/binary-invoked"
       test ! -f "$test_root/legacy" ;;
-    legacy|pr)
+    legacy|piped-legacy|pr)
       test -f "$test_root/legacy"
       test ! -f "$test_root/binary-invoked" ;;
   esac
