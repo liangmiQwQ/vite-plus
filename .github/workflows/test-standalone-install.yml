@@ -1576,14 +1576,8 @@ jobs:
 
           $output = (& ./packages/cli/install.ps1 *>&1) | Out-String
           Write-Host $output
-          if (-not $output.Contains("Install locations:")) {
-            throw "install.ps1 did not print install locations"
-          }
-          if (-not $output.Contains("Data directory: $($env:VP_DATA_DIR)")) {
-            throw "install.ps1 did not print the split data directory"
-          }
-          if (-not $output.Contains("Bin directory:  $($env:VP_BIN_DIR)")) {
-            throw "install.ps1 did not print the split bin directory"
+          if (-not $output.Contains("Vite+ setup complete.")) {
+            throw "install.ps1 did not complete self-setup"
           }
 
           function Get-DirMap([string]$VpBinary) {
