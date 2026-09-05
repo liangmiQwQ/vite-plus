@@ -21,6 +21,8 @@
 #                   When set, overrides VP_VERSION and installs the clearly-defined
 #                   0.0.0-commit.<sha> build through the bridge instead of npm.
 
+# When sourced, returns INSTALL_DIR, SHIM_DIR, CACHE_DIR, CONFIG_DIR, and STATE_DIR.
+# These are resolved paths, not VP_* overrides for subsequent commands.
 set -e
 
 VP_VERSION="${VP_VERSION:-latest}"
@@ -50,11 +52,11 @@ LEGACY_INSTALLER_URL="${VP_LEGACY_INSTALLER_URL:-https://viteplus.dev/install-le
 INSTALLER_PATH="${BASH_SOURCE[0]:-}"
 
 info() {
-  echo -e "${BLUE}info${NC}: $1"
+  echo -e "${BLUE}info${NC}: $1" >&2
 }
 
 error() {
-  echo -e "${RED}error${NC}: $1"
+  echo -e "${RED}error${NC}: $1" >&2
   exit 1
 }
 
@@ -337,7 +339,7 @@ enable_setup_vp_legacy_compatibility() {
   export VP_HOME
 }
 
-main() (
+main() {
   enable_setup_vp_legacy_compatibility
 
   if [ -n "$PR_VERSION" ] && [ -n "$LOCAL_TGZ" ]; then
@@ -380,8 +382,11 @@ main() (
 
   local platform
   platform=$(detect_platform)
-  acquire_and_handoff "$platform"
-)
+  local result
+  result="$(set -e; acquire_and_handoff "$platform")" || return $?
+  # setup-vp reads these assignments in the shell that sourced this installer.
+  eval "$result"
+}
 
 acquire_and_handoff() (
   local platform="$1"
@@ -392,7 +397,6 @@ acquire_and_handoff() (
 
   # Keep acquisition separate from permanent installation. The bootstrap owns cleanup.
   local binary_source platform_temp_dir=""
-  trap '[ -z "$platform_temp_dir" ] || rm -rf "$platform_temp_dir"' EXIT
   if [ -z "$LOCAL_TGZ" ]; then
     # npm registry or registry bridge (when PR_VERSION is set)
     get_platform_suffix "$platform"
@@ -409,7 +413,8 @@ acquire_and_handoff() (
     # Create temp directory for extraction
     platform_temp_dir=$(mktemp -d)
     platform_temp_dir=$(cd "$platform_temp_dir" && pwd -P)
-    download_and_extract "$platform_url" "$platform_temp_dir"
+    trap "rm -rf -- $(printf '%q' "$platform_temp_dir")" EXIT
+    download_and_extract "$platform_url" "$platform_temp_dir" || exit $?
     binary_source="$platform_temp_dir/$binary_name"
     [ -f "$binary_source" ] || error "Downloaded package does not contain $binary_name"
     chmod +x "$binary_source"
@@ -439,19 +444,23 @@ run_legacy_installer() (
   fi
   if [ -z "$legacy_script" ] || [ ! -f "$legacy_script" ]; then
     legacy_script=$(mktemp)
-    trap 'rm -f "$legacy_script"' EXIT
-    curl_with_error_handling -fsSL "$LEGACY_INSTALLER_URL" -o "$legacy_script"
+    trap "rm -f -- $(printf '%q' "$legacy_script")" EXIT
+    curl_with_error_handling -fsSL "$LEGACY_INSTALLER_URL" -o "$legacy_script" >&2
   fi
   # Preserve the child status explicitly, including when a caller disables errexit.
   local status=0
-  bash "$legacy_script" "$binary_source" "$VP_VERSION" "$PR_VERSION" || status=$?
-  exit "$status"
+  source "$legacy_script" "$binary_source" "$VP_VERSION" "$PR_VERSION" >&2 || status=$?
+  [ "$status" -eq 0 ] || exit "$status"
+  local name
+  for name in INSTALL_DIR SHIM_DIR CACHE_DIR CONFIG_DIR STATE_DIR; do
+    printf '%s=%q\n' "$name" "${!name}"
+  done
 )
 
 handoff_install() (
   unset VP_SELF_SETUP_SUPPORT_CHECK
   local status=0
-  "$1" || status=$?
+  VP_SELF_SETUP_SHELL=sh "$1" || status=$?
   exit "$status"
 )
 

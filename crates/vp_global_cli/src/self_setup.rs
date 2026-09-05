@@ -14,6 +14,14 @@ use crate::{
 };
 
 pub(crate) async fn maybe_run() -> Result<bool, Error> {
+    let shell = std::env::var(env_vars::VP_SELF_SETUP_SHELL).ok();
+    if let Some(shell) = shell.as_deref() {
+        if !matches!(shell, "sh" | "powershell") {
+            return Err(Error::Other("VP_SELF_SETUP_SHELL must be sh or powershell".into()));
+        }
+        vp_shared::validate_vp_dir_env().map_err(|error| Error::Other(error.to_string().into()))?;
+        output::route_user_output_to_stderr();
+    }
     let binary = std::env::current_exe()?;
     // macOS can return the invoking symlink; its parent is the shared shim directory.
     #[cfg(target_os = "macos")]
@@ -21,12 +29,41 @@ pub(crate) async fn maybe_run() -> Result<bool, Error> {
     let bin = binary.parent().ok_or(Error::CliBinaryNotFound)?;
     // Once the binary path is resolved, normal commands only check marker existence.
     if bin.join(SELF_SETUP_MARKER).try_exists()? {
+        if let Some(shell) = shell.as_deref() {
+            print_shell_result(shell);
+            return Ok(true);
+        }
         return Ok(false);
     }
 
     vp_shared::validate_vp_dir_env().map_err(|error| Error::Other(error.to_string().into()))?;
     run(&binary).await?;
+    if let Some(shell) = shell.as_deref() {
+        print_shell_result(shell);
+    }
     Ok(true)
+}
+
+// Only successful setup emits executable output; logs use stderr in this mode.
+fn print_shell_result(shell: &str) {
+    let dirs = &EnvConfig::get().dirs;
+    for (sh_name, powershell_name, path) in [
+        ("INSTALL_DIR", "InstallDir", &dirs.data),
+        ("SHIM_DIR", "ShimDir", &dirs.bin),
+        ("CACHE_DIR", "CacheDir", &dirs.cache),
+        ("CONFIG_DIR", "ConfigDir", &dirs.config),
+        ("STATE_DIR", "StateDir", &dirs.state),
+    ] {
+        let value = path.to_string();
+        if shell == "powershell" {
+            println!(
+                "$script:{powershell_name} = '{}'",
+                setup::escape_powershell_single_quoted_string(&value)
+            );
+        } else {
+            println!("{sh_name}=\"{}\"", setup::escape_posix_double_quoted_string(&value));
+        }
+    }
 }
 
 /// Setup Vite+ for the first run
@@ -174,7 +211,7 @@ async fn run(source: &Path) -> Result<(), Error> {
 }
 
 fn interactive() -> bool {
-    std::env::var_os("CI").is_none() && vp_shared::is_stdout_terminal()
+    std::env::var_os("CI").is_none() && vp_shared::is_stderr_terminal()
 }
 
 fn find_on_path(name: &str) -> Option<AbsolutePathBuf> {

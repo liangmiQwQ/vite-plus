@@ -220,3 +220,6 @@ pub mod dump_dirs {
 /// When set, `get_trampoline_path()` uses this path instead of resolving
 /// relative to `current_exe()`. Only used in test environments.
 pub const VP_TRAMPOLINE_PATH: &str = "VP_TRAMPOLINE_PATH";
+
+/// Emit shell assignments after self-setup (sh or powershell).
+pub const VP_SELF_SETUP_SHELL: &str = "VP_SELF_SETUP_SHELL";

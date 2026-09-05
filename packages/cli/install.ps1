@@ -18,6 +18,8 @@
 #                   When set, overrides VP_VERSION and installs the clearly-defined
 #                   0.0.0-commit.<sha> build through the bridge instead of npm.
 
+# When dot-sourced, returns script-scoped InstallDir, ShimDir, CacheDir, ConfigDir, and StateDir.
+# These are resolved paths, not VP_* overrides for subsequent commands.
 $ErrorActionPreference = "Stop"
 
 $ViteVersion = if ($env:VP_VERSION) { $env:VP_VERSION } else { "latest" }
@@ -332,10 +334,10 @@ function Invoke-LegacyInstaller {
     $global:LASTEXITCODE = 0
     $legacyScript = if ($InstallerDirectory) { Join-Path $InstallerDirectory 'install-legacy.ps1' }
     if ($legacyScript -and (Test-Path -LiteralPath $legacyScript -PathType Leaf)) {
-        & $legacyScript -BinarySource $BinarySource -ResolvedVersion $ViteVersion -PreviewRef $PrVersion
+        . $legacyScript -BinarySource $BinarySource -ResolvedVersion $ViteVersion -PreviewRef $PrVersion
     } else {
         $response = Invoke-WebRequest -Uri $LegacyInstallerUrl -UseBasicParsing
-        & ([scriptblock]::Create($response.Content)) -BinarySource $BinarySource -ResolvedVersion $ViteVersion -PreviewRef $PrVersion
+        . ([scriptblock]::Create($response.Content)) -BinarySource $BinarySource -ResolvedVersion $ViteVersion -PreviewRef $PrVersion
     }
     # A child script's exit only returns to this bootstrap, so forward its failure.
     if ($LASTEXITCODE -ne 0) {
@@ -346,13 +348,17 @@ function Invoke-LegacyInstaller {
 function Invoke-InstallHandoff {
     param([string]$BinarySource)
     $previous = $env:VP_SELF_SETUP_SUPPORT_CHECK
+    $previousShell = $env:VP_SELF_SETUP_SHELL
     try {
         Remove-Item Env:VP_SELF_SETUP_SUPPORT_CHECK -ErrorAction SilentlyContinue
-        & $BinarySource
+        $env:VP_SELF_SETUP_SHELL = 'powershell'
+        $result = & $BinarySource
         if ($LASTEXITCODE -ne 0) {
             Exit-Installer -Code $LASTEXITCODE
         }
+        Invoke-Expression ($result -join "`n")
     } finally {
+        $env:VP_SELF_SETUP_SHELL = $previousShell
         $env:VP_SELF_SETUP_SUPPORT_CHECK = $previous
     }
 }

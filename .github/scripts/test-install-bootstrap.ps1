@@ -18,6 +18,12 @@ if ($args.Count -eq 0) {
     if (Test-Path Env:VP_SELF_SETUP_SUPPORT_CHECK) { exit 99 }
     New-Item -ItemType File -Path "$testRoot/binary-invoked" | Out-Null
     if ($scenario -eq 'failure') { exit 42 }
+    if ($env:VP_SELF_SETUP_SHELL -ne 'powershell') { exit 98 }
+    Write-Output ("`$script:InstallDir = '{0}'" -f "$testRoot/data")
+    Write-Output ("`$script:ShimDir = '{0}'" -f "$testRoot/installed bin")
+    Write-Output ("`$script:CacheDir = '{0}'" -f "$testRoot/cache")
+    Write-Output ("`$script:ConfigDir = '{0}'" -f "$testRoot/config")
+    Write-Output ("`$script:StateDir = '{0}'" -f "$testRoot/state")
     exit 0
 }
 if ($env:VP_SELF_SETUP_SUPPORT_CHECK -ne '1') { exit 99 }
@@ -27,6 +33,11 @@ exit 0
 '@ | Set-Content -LiteralPath "$testRoot/package/binary.ps1"
 @'
 param($BinarySource, $ResolvedVersion, $PreviewRef)
+$script:InstallDir = "$testRoot/data"
+$script:ShimDir = "$testRoot/installed bin"
+$script:CacheDir = "$testRoot/cache"
+$script:ConfigDir = "$testRoot/config"
+$script:StateDir = "$testRoot/state"
 if (-not [System.IO.Path]::IsPathRooted($BinarySource) -or -not (Test-Path -LiteralPath $BinarySource)) { throw 'Invalid payload path' }
 @($ResolvedVersion, $PreviewRef) | Set-Content -LiteralPath "$testRoot/legacy"
 if ($scenario -eq 'legacy-failure') { exit 42 }
@@ -76,6 +87,11 @@ try {
                 $InstallerDirectory = "$testRoot/scripts"
                 if ($scenario -eq 'pr') { $PrVersion = '2406' }
                 Main
+                Assert ($script:InstallDir -eq "$testRoot/data") 'InstallDir was lost'
+                Assert ($script:ShimDir -eq "$testRoot/installed bin") 'ShimDir was lost'
+                Assert ($script:CacheDir -eq "$testRoot/cache") 'CacheDir was lost'
+                Assert ($script:ConfigDir -eq "$testRoot/config") 'ConfigDir was lost'
+                Assert ($script:StateDir -eq "$testRoot/state") 'StateDir was lost'
             }
         } catch {
             if ($scenario -notin @('failure', 'legacy-failure') -or -not (Test-IsInstallStopException $_)) { throw }

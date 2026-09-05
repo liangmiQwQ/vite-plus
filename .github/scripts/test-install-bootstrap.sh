@@ -12,6 +12,11 @@ touch "$test_root/scripts/install.sh"
 cat > "$test_root/scripts/install-legacy.sh" <<'LEGACY'
 #!/bin/bash
 set -eu
+INSTALL_DIR="$test_root/data"
+SHIM_DIR="$test_root/installed bin"
+CACHE_DIR="$test_root/cache"
+CONFIG_DIR="$test_root/config"
+STATE_DIR="$test_root/state"
 case "$1" in /*) ;; *) exit 80 ;; esac
 test -f "$1"
 printf '%s\n' "$2" "$3" > "$test_root/legacy"
@@ -25,6 +30,12 @@ if [ "$#" -eq 0 ]; then
   test -z "${VP_SELF_SETUP_SUPPORT_CHECK+x}" || exit 99
   touch "$test_root/binary-invoked"
   if [ "$scenario" = failure ]; then exit 42; fi
+  test "${VP_SELF_SETUP_SHELL:-}" = sh || exit 98
+  printf 'INSTALL_DIR=%q\n' "$test_root/data"
+  printf 'SHIM_DIR=%q\n' "$test_root/installed bin"
+  printf 'CACHE_DIR=%q\n' "$test_root/cache"
+  printf 'CONFIG_DIR=%q\n' "$test_root/config"
+  printf 'STATE_DIR=%q\n' "$test_root/state"
   exit 0
 fi
 test "${VP_SELF_SETUP_SUPPORT_CHECK:-}" = 1 || exit 99
@@ -67,6 +78,11 @@ for scenario in supported legacy legacy-failure piped-legacy piped-legacy-failur
     if [ "$scenario" = pr ]; then PR_VERSION=2406; fi
     if [ "$scenario" = supported ]; then export VP_SELF_SETUP_SUPPORT_CHECK=original; fi
     main
+    test "$INSTALL_DIR" = "$test_root/data"
+    test "$SHIM_DIR" = "$test_root/installed bin"
+    test "$CACHE_DIR" = "$test_root/cache"
+    test "$CONFIG_DIR" = "$test_root/config"
+    test "$STATE_DIR" = "$test_root/state"
   ) > "$test_root/output" 2>&1
   status=$?
   set -e

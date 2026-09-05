@@ -19,6 +19,7 @@ use std::process::ExitStatus;
 
 #[cfg(windows)]
 use indoc::formatdoc;
+use vp_shared::output;
 
 use crate::{
     commands::{
@@ -73,17 +74,17 @@ pub(crate) async fn execute_for_binary(
     create_env_files().await?;
 
     if env_only {
-        println!("{}", help::render_heading("Setup"));
-        println!("  Updated shell environment files.");
-        println!("  Run {} to verify setup.", help::accent_command("vp env doctor"));
+        output::raw(&help::render_heading("Setup"));
+        output::raw("  Updated shell environment files.");
+        output::raw(&format!("  Run {} to verify setup.", help::accent_command("vp env doctor")));
         return Ok(ExitStatus::default());
     }
 
     let bin_dir = &dirs.bin;
 
-    println!("{}", help::render_heading("Setup"));
-    println!("  Preparing vite-plus environment.");
-    println!();
+    output::raw(&help::render_heading("Setup"));
+    output::raw("  Preparing vite-plus environment.");
+    output::raw("");
 
     // Ensure bin directory exists
     tokio::fs::create_dir_all(bin_dir).await?;
@@ -141,27 +142,27 @@ pub(crate) async fn execute_for_binary(
 
     // Print results
     if !created.is_empty() {
-        println!("{}", help::render_heading("Created Shims"));
+        output::raw(&help::render_heading("Created Shims"));
         for tool in &created {
             let shim_path = bin_dir.join(shim_filename(tool));
-            println!("  {}", shim_path.as_path().display());
+            output::raw(&format!("  {}", shim_path.as_path().display()));
         }
     }
 
     if !skipped.is_empty() && !refresh {
         if !created.is_empty() {
-            println!();
+            output::raw("");
         }
-        println!("{}", help::render_heading("Skipped Shims"));
+        output::raw(&help::render_heading("Skipped Shims"));
         for tool in &skipped {
             let shim_path = bin_dir.join(shim_filename(tool));
-            println!("  {}", shim_path.as_path().display());
+            output::raw(&format!("  {}", shim_path.as_path().display()));
         }
-        println!();
-        println!("  Use --refresh to update existing shims.");
+        output::raw("");
+        output::raw("  Use --refresh to update existing shims.");
     }
 
-    println!();
+    output::raw("");
     print_path_instructions(&dirs.config);
 
     Ok(ExitStatus::default())
@@ -1117,45 +1118,45 @@ fn print_path_instructions(env_dir: &vt_path::AbsolutePath) {
         (env_path.clone(), env_path)
     };
 
-    println!("{}", help::render_heading("Next Steps"));
-    println!("  Add to your shell profile (~/.zshrc, ~/.bashrc, etc.):");
-    println!();
-    println!("  . \"{env_path}/env\"");
-    println!();
-    println!("  For fish shell, add to ~/.config/fish/config.fish:");
-    println!();
-    println!("  source \"{env_path}/env.fish\"");
-    println!();
-    println!("  For Nushell, add to ~/.config/nushell/config.nu:");
-    println!();
-    println!("  source '{nu_env_path}/env.nu'");
-    println!();
-    println!("  For PowerShell, add to your $PROFILE:");
-    println!();
-    println!("  . \"{env_path}/env.ps1\"");
-    println!();
-    println!("  For IDE support (VS Code, Cursor), ensure bin directory is in system PATH:");
+    output::raw(&help::render_heading("Next Steps"));
+    output::raw("  Add to your shell profile (~/.zshrc, ~/.bashrc, etc.):");
+    output::raw("");
+    output::raw(&format!("  . \"{env_path}/env\""));
+    output::raw("");
+    output::raw("  For fish shell, add to ~/.config/fish/config.fish:");
+    output::raw("");
+    output::raw(&format!("  source \"{env_path}/env.fish\""));
+    output::raw("");
+    output::raw("  For Nushell, add to ~/.config/nushell/config.nu:");
+    output::raw("");
+    output::raw(&format!("  source '{nu_env_path}/env.nu'"));
+    output::raw("");
+    output::raw("  For PowerShell, add to your $PROFILE:");
+    output::raw("");
+    output::raw(&format!("  . \"{env_path}/env.ps1\""));
+    output::raw("");
+    output::raw("  For IDE support (VS Code, Cursor), ensure bin directory is in system PATH:");
 
     #[cfg(target_os = "macos")]
     {
-        println!("  - macOS: Add to ~/.profile or use launchd");
+        output::raw("  - macOS: Add to ~/.profile or use launchd");
     }
 
     #[cfg(target_os = "linux")]
     {
-        println!("  - Linux: Add to ~/.profile for display manager integration");
+        output::raw("  - Linux: Add to ~/.profile for display manager integration");
     }
 
     #[cfg(target_os = "windows")]
     {
-        println!("  - Windows: System Properties -> Environment Variables -> Path");
+        output::raw("  - Windows: System Properties -> Environment Variables -> Path");
     }
 
-    println!();
-    println!(
+    output::raw("");
+    output::raw(&format!(
         "  Restart your terminal and IDE, then run {} to verify.",
         help::accent_command("vp env doctor")
-    );
+    ));
 }
 
 #[cfg(test)]
