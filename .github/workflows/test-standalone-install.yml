@@ -1827,40 +1827,31 @@ jobs:
             throw "the dangling current entry is not a reparse point"
           }
 
-      - name: Repair the dangling junction without ANSI output
+      - name: Repair the dangling junction and forward setup options
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $installer = Join-Path $env:DEV_DRIVE "target/release/vp-setup.exe"
-          $stdout = Join-Path $env:RUNNER_TEMP "vp-setup-no-color.stdout.txt"
-          $stderr = Join-Path $env:RUNNER_TEMP "vp-setup-no-color.stderr.txt"
+          $stdout = Join-Path $env:RUNNER_TEMP "vp-setup.stdout.txt"
+          $stderr = Join-Path $env:RUNNER_TEMP "vp-setup.stderr.txt"
           $pathBefore = [Environment]::GetEnvironmentVariable("Path", "User")
-          $env:NO_COLOR = "1"
-          try {
-            $process = Start-Process -FilePath $installer `
-              -ArgumentList @(
-                "--yes",
-                "--version", $env:VP_SETUP_TEST_VERSION,
-                "--registry", $env:VP_SETUP_TEST_REGISTRY,
-                "--no-node-manager",
-                "--no-modify-path"
-              ) `
-              -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
-              -Wait -PassThru -NoNewWindow
-          } finally {
-            Remove-Item Env:NO_COLOR -ErrorAction SilentlyContinue
-          }
+          $process = Start-Process -FilePath $installer `
+            -ArgumentList @(
+              "--yes",
+              "--version", $env:VP_SETUP_TEST_VERSION,
+              "--registry", $env:VP_SETUP_TEST_REGISTRY,
+              "--no-node-manager",
+              "--no-modify-path"
+            ) `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
+            -Wait -PassThru -NoNewWindow
 
           Get-Content -Raw $stdout | Write-Host
           Get-Content -Raw $stderr | Write-Host
           if ($process.ExitCode -ne 0) {
             throw "vp-setup.exe exited with $($process.ExitCode)"
           }
-          foreach ($path in @($stdout, $stderr)) {
-            if ([System.IO.File]::ReadAllBytes($path) -contains [byte]0x1b) {
-              throw "$path contains an ANSI escape"
-            }
-          }
+          # NO_COLOR across the target CLI is deferred to a separate change.
           if (-not (Test-Path (Join-Path $env:VP_HOME "current/bin/vp.exe"))) {
             throw "vp-setup.exe did not repair the dangling current junction"
           }

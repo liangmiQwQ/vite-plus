@@ -437,19 +437,22 @@ run_legacy_installer() (
   if [ -n "$INSTALLER_PATH" ] && [ -f "$INSTALLER_PATH" ]; then
     legacy_script="$(dirname "$INSTALLER_PATH")/install-legacy.sh"
   fi
-  if [ -n "$legacy_script" ] && [ -f "$legacy_script" ]; then
-    bash "$legacy_script" "$binary_source" "$VP_VERSION" "$PR_VERSION"
-  else
+  if [ -z "$legacy_script" ] || [ ! -f "$legacy_script" ]; then
     legacy_script=$(mktemp)
     trap 'rm -f "$legacy_script"' EXIT
     curl_with_error_handling -fsSL "$LEGACY_INSTALLER_URL" -o "$legacy_script"
-    bash "$legacy_script" "$binary_source" "$VP_VERSION" "$PR_VERSION"
   fi
+  # Preserve the child status explicitly, including when a caller disables errexit.
+  local status=0
+  bash "$legacy_script" "$binary_source" "$VP_VERSION" "$PR_VERSION" || status=$?
+  exit "$status"
 )
 
 handoff_install() (
   unset VP_SELF_SETUP_SUPPORT_CHECK
-  "$1"
+  local status=0
+  "$1" || status=$?
+  exit "$status"
 )
 
 main "$@"

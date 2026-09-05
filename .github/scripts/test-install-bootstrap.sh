@@ -15,6 +15,9 @@ set -eu
 case "$1" in /*) ;; *) exit 80 ;; esac
 test -f "$1"
 printf '%s\n' "$2" "$3" > "$test_root/legacy"
+case "$scenario" in
+  legacy-failure|piped-legacy-failure) exit 43 ;;
+esac
 LEGACY
 cat > "$test_root/package/vp" <<'BINARY'
 #!/bin/bash
@@ -26,7 +29,7 @@ if [ "$#" -eq 0 ]; then
 fi
 test "${VP_SELF_SETUP_SUPPORT_CHECK:-}" = 1 || exit 99
 case "$scenario" in
-  legacy|piped-legacy|pr) printf 'Usage: vp [COMMAND]\n' ;;
+  legacy|legacy-failure|piped-legacy|piped-legacy-failure|pr) printf 'Usage: vp [COMMAND]\n' ;;
   *) printf 'vite-plus-self-setup-v1\n' ;;
 esac
 BINARY
@@ -46,7 +49,7 @@ curl() {
   esac
 }
 
-for scenario in supported legacy piped-legacy failure pr; do
+for scenario in supported legacy legacy-failure piped-legacy piped-legacy-failure failure pr; do
   export scenario
   : > "$test_root/requests"
   rm -f "$test_root/legacy" "$test_root/binary-invoked"
@@ -57,7 +60,7 @@ for scenario in supported legacy piped-legacy failure pr; do
     LOCAL_TGZ="" LOCAL_BINARY="" PR_VERSION="" PACKAGE_METADATA=""
     NPM_REGISTRY=https://custom.example
     INSTALLER_PATH="$test_root/scripts/install.sh"
-    if [ "$scenario" = piped-legacy ]; then
+    if [[ "$scenario" == piped-legacy* ]]; then
       INSTALLER_PATH=""
       LEGACY_INSTALLER_URL="file://$test_root/scripts/install-legacy.sh"
     fi
@@ -69,6 +72,8 @@ for scenario in supported legacy piped-legacy failure pr; do
   set -e
   if [ "$scenario" = failure ]; then
     test "$status" -eq 42
+  elif [[ "$scenario" == *legacy-failure ]]; then
+    test "$status" -eq 43
   elif [ "$status" -ne 0 ]; then
     cat "$test_root/output"
     exit 1
@@ -77,7 +82,7 @@ for scenario in supported legacy piped-legacy failure pr; do
     supported|failure)
       test -f "$test_root/binary-invoked"
       test ! -f "$test_root/legacy" ;;
-    legacy|piped-legacy|pr)
+    legacy|legacy-failure|piped-legacy|piped-legacy-failure|pr)
       test -f "$test_root/legacy"
       test ! -f "$test_root/binary-invoked" ;;
   esac
