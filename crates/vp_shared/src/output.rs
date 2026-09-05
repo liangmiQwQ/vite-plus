@@ -35,13 +35,18 @@ pub const WARN_SIGN: &str = "\u{26A0}";
 /// Right arrow: →
 pub const ARROW: &str = "\u{2192}";
 
+// Direct owo-colors formatting does not inspect NO_COLOR, including in installer subprocesses.
+fn prefix(text: &str, styled: impl std::fmt::Display) -> String {
+    if std::env::var_os("NO_COLOR").is_some() { text.to_owned() } else { styled.to_string() }
+}
+
 /// Print an info message to stdout.
 #[expect(clippy::print_stdout, clippy::print_stderr, clippy::disallowed_macros)]
 pub fn info(msg: &str) {
     if user_output_to_stderr() {
-        eprintln!("{} {msg}", "info:".bright_blue().bold());
+        eprintln!("{} {msg}", prefix("info:", "info:".bright_blue().bold()));
     } else {
-        println!("{} {msg}", "info:".bright_blue().bold());
+        println!("{} {msg}", prefix("info:", "info:".bright_blue().bold()));
     }
 }
 
@@ -49,22 +54,22 @@ pub fn info(msg: &str) {
 #[expect(clippy::print_stdout, clippy::print_stderr, clippy::disallowed_macros)]
 pub fn pass(msg: &str) {
     if user_output_to_stderr() {
-        eprintln!("{} {msg}", "pass:".bright_blue().bold());
+        eprintln!("{} {msg}", prefix("pass:", "pass:".bright_blue().bold()));
     } else {
-        println!("{} {msg}", "pass:".bright_blue().bold());
+        println!("{} {msg}", prefix("pass:", "pass:".bright_blue().bold()));
     }
 }
 
 /// Print a warning message to stderr.
 #[expect(clippy::print_stderr, clippy::disallowed_macros)]
 pub fn warn(msg: &str) {
-    eprintln!("{} {msg}", "warn:".yellow().bold());
+    eprintln!("{} {msg}", prefix("warn:", "warn:".yellow().bold()));
 }
 
 /// Print an error message to stderr.
 #[expect(clippy::print_stderr, clippy::disallowed_macros)]
 pub fn error(msg: &str) {
-    eprintln!("{} {msg}", "error:".red().bold());
+    eprintln!("{} {msg}", prefix("error:", "error:".red().bold()));
 }
 
 /// Print a note message to stderr (supplementary info).
@@ -74,16 +79,16 @@ pub fn error(msg: &str) {
 /// or a parser keeps the command's own output intact.
 #[expect(clippy::print_stderr, clippy::disallowed_macros)]
 pub fn note(msg: &str) {
-    eprintln!("{} {msg}", "note:".dimmed().bold());
+    eprintln!("{} {msg}", prefix("note:", "note:".dimmed().bold()));
 }
 
 /// Print a success line with checkmark to stdout.
 #[expect(clippy::print_stdout, clippy::print_stderr, clippy::disallowed_macros)]
 pub fn success(msg: &str) {
     if user_output_to_stderr() {
-        eprintln!("{} {msg}", CHECK.green());
+        eprintln!("{} {msg}", prefix(CHECK, CHECK.green()));
     } else {
-        println!("{} {msg}", CHECK.green());
+        println!("{} {msg}", prefix(CHECK, CHECK.green()));
     }
 }
 
