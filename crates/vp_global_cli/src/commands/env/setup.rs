@@ -54,6 +54,15 @@ impl EnvShell {
 
 /// Execute the setup command.
 pub async fn execute(refresh: bool, env_only: bool) -> Result<ExitStatus, Error> {
+    execute_for_binary(&std::env::current_exe()?, refresh, env_only).await
+}
+
+// Self-setup must create shims for the deployed binary, not the temporary download.
+pub(crate) async fn execute_for_binary(
+    current_exe: &std::path::Path,
+    refresh: bool,
+    env_only: bool,
+) -> Result<ExitStatus, Error> {
     let config = vp_shared::EnvConfig::get();
     let dirs = &config.dirs;
 
@@ -86,18 +95,15 @@ pub async fn execute(refresh: bool, env_only: bool) -> Result<ExitStatus, Error>
     #[cfg(windows)]
     tokio::fs::write(bin_dir.join("vp-use.cmd"), vp_use_cmd_content(&config)).await?;
 
-    // Get the current executable path (for shims)
-    let current_exe = std::env::current_exe()?;
-
     // Create wrapper script in bin/
-    setup_vp_wrapper(&current_exe, bin_dir, refresh).await?;
+    setup_vp_wrapper(current_exe, bin_dir, refresh).await?;
 
     // Create default tool shims
     let mut created = Vec::new();
     let mut skipped = Vec::new();
 
     for tool in crate::shim::DEFAULT_SHIM_TOOLS {
-        let result = create_shim(&current_exe, bin_dir, tool, refresh).await?;
+        let result = create_shim(current_exe, bin_dir, tool, refresh).await?;
         if result {
             created.push(*tool);
         } else {
@@ -122,7 +128,7 @@ pub async fn execute(refresh: bool, env_only: bool) -> Result<ExitStatus, Error>
 
     #[cfg(windows)]
     if refresh {
-        if let Err(e) = refresh_package_shims(bin_dir).await {
+        if let Err(e) = refresh_package_shims(current_exe, bin_dir).await {
             tracing::warn!("Failed to refresh package shims: {}", e);
         }
     }
@@ -250,14 +256,13 @@ async fn setup_vp_wrapper(
 
     #[cfg(windows)]
     {
-        let _ = current_exe;
         let bin_vp_exe = bin_dir.join("vp.exe");
 
         // Create trampoline bin/vp.exe that forwards to current\bin\vp.exe
         let should_create = refresh || !tokio::fs::try_exists(&bin_vp_exe).await.unwrap_or(false);
 
         if should_create {
-            let trampoline_src = get_trampoline_path()?;
+            let trampoline_src = trampoline_path_for_binary(current_exe)?;
             // On refresh, the existing vp.exe may still be running (the trampoline
             // that launched us). Windows prevents overwriting a running exe, so we
             // rename it to a timestamped .old file first, then copy the new one.
@@ -395,11 +400,11 @@ async fn create_unix_shim(
 /// See: <https://github.com/voidzero-dev/vite-plus/issues/835>
 #[cfg(windows)]
 async fn create_windows_shim(
-    _source: &std::path::Path,
+    source: &std::path::Path,
     bin_dir: &vt_path::AbsolutePath,
     tool: &str,
 ) -> Result<(), Error> {
-    let trampoline_src = get_trampoline_path()?;
+    let trampoline_src = trampoline_path_for_binary(source)?;
     let shim_path = bin_dir.join(format!("{tool}.exe"));
     tokio::fs::copy(trampoline_src.as_path(), &shim_path).await?;
     write_shim_pointer_beside(shim_path.as_path());
@@ -417,7 +422,10 @@ async fn create_windows_shim(
 /// Discovers all package binaries tracked by BinConfig with `source: Vp`
 /// and replaces their `.exe` with the current trampoline.
 #[cfg(windows)]
-async fn refresh_package_shims(bin_dir: &vt_path::AbsolutePath) -> Result<(), Error> {
+async fn refresh_package_shims(
+    current_exe: &std::path::Path,
+    bin_dir: &vt_path::AbsolutePath,
+) -> Result<(), Error> {
     use super::bin_config::BinConfig;
 
     let package_bins = BinConfig::find_all_vp_source().await?;
@@ -426,7 +434,7 @@ async fn refresh_package_shims(bin_dir: &vt_path::AbsolutePath) -> Result<(), Er
         return Ok(());
     }
 
-    let trampoline_src = get_trampoline_path()?;
+    let trampoline_src = trampoline_path_for_binary(current_exe)?;
 
     for bin_name in &package_bins {
         // Default shims and vp are already refreshed by the main loop.
@@ -467,6 +475,13 @@ fn write_shim_pointer_beside(exe_path: &std::path::Path) {
 /// In tests, `VP_TRAMPOLINE_PATH` can override the resolved path.
 #[cfg(windows)]
 pub(crate) fn get_trampoline_path() -> Result<vt_path::AbsolutePathBuf, Error> {
+    trampoline_path_for_binary(&std::env::current_exe()?)
+}
+
+#[cfg(windows)]
+fn trampoline_path_for_binary(
+    current_exe: &std::path::Path,
+) -> Result<vt_path::AbsolutePathBuf, Error> {
     // Allow tests to override the trampoline path
     if let Ok(override_path) = std::env::var(vp_shared::env_vars::VP_TRAMPOLINE_PATH) {
         let path = std::path::PathBuf::from(override_path);
@@ -476,7 +491,6 @@ pub(crate) fn get_trampoline_path() -> Result<vt_path::AbsolutePathBuf, Error> {
         }
     }
 
-    let current_exe = std::env::current_exe()?;
     let bin_dir = current_exe
         .parent()
         .ok_or_else(|| Error::Other("Cannot find parent directory of vp.exe".into()))?;
@@ -943,12 +957,12 @@ fn render_nu_path_ref(path_ref: &str) -> String {
 }
 
 /// Escape a value for a POSIX-shell double-quoted string.
-pub(super) fn escape_posix_double_quoted_string(value: &str) -> String {
+pub(crate) fn escape_posix_double_quoted_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('$', "\\$").replace('`', "\\`").replace('"', "\\\"")
 }
 
 /// Escape a value for a Fish double-quoted string.
-pub(super) fn escape_fish_double_quoted_string(value: &str) -> String {
+pub(crate) fn escape_fish_double_quoted_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('$', "\\$").replace('"', "\\\"")
 }
 
@@ -964,13 +978,13 @@ fn escape_home_relative_double_quoted_path(path_ref: &str, escape: fn(&str) -> S
 ///
 /// Example: `vp "home\with spaces"` → `vp \"home\\with spaces\"`
 /// https://www.nushell.sh/book/working_with_strings.html#double-quoted-strings
-pub(super) fn escape_nu_double_quoted_string(value: &str) -> String {
+pub(crate) fn escape_nu_double_quoted_string(value: &str) -> String {
     // `vp "home\with spaces"` → `vp \"home\\with spaces\"`
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 /// Escape a value for a PowerShell single-quoted string.
-pub(super) fn escape_powershell_single_quoted_string(value: &str) -> String {
+pub(crate) fn escape_powershell_single_quoted_string(value: &str) -> String {
     value.replace('\'', "''")
 }
 

@@ -1,0 +1,25 @@
+[[case]]
+name = "command_self_setup"
+vp = "global"
+steps = [
+  { argv = ["vpt", "rm", "$VP_HOME/current/bin/.vp-setup-complete"], snapshot = false },
+  { argv = ["vp", "--help"], envs = [["VP_SELF_SETUP_SUPPORT_CHECK", "1"]], comment = "The capability probe does not perform setup" },
+  ["vpt", "stat-file", "$VP_HOME/current/bin/.vp-setup-complete", "--assert", "missing"],
+  { argv = ["vp", "not-a-command"], comment = "An unmarked deployed binary consumes the invocation as setup, without parsing the command", snapshot = false },
+  ["vpt", "stat-file", "$VP_HOME/current/bin/.vp-setup-complete", "--assert", "file"],
+  { argv = ["vp", "not-a-command"], comment = "Once marked, the binary dispatches commands normally", continue-on-failure = true },
+]
+
+[[case]]
+name = "command_self_setup_retry"
+vp = "global"
+skip-platforms = ["windows"]
+steps = [
+  { argv = ["vpt", "rm", "$VP_HOME/current/bin/.vp-setup-complete", "$VP_HOME/env"], snapshot = false },
+  { argv = ["vpt", "mkdir", "$VP_HOME/env"], snapshot = false },
+  { argv = ["vp", "env", "setup", "--refresh"], comment = "A failed setup does not mark the deployed binary as complete", continue-on-failure = true },
+  ["vpt", "stat-file", "$VP_HOME/current/bin/.vp-setup-complete", "--assert", "missing"],
+  { argv = ["vpt", "rm", "-r", "$VP_HOME/env"], snapshot = false },
+  { argv = ["vp", "env", "setup", "--refresh"], comment = "The same upgrade handoff retries setup after the failure is repaired", snapshot = false },
+  ["vpt", "stat-file", "$VP_HOME/current/bin/.vp-setup-complete", "--assert", "file"],
+]
