@@ -459,6 +459,10 @@ run_legacy_installer() (
 
 handoff_install() (
   unset VP_SELF_SETUP_SUPPORT_CHECK
+  # curl | bash leaves stdin on the script pipe; setup consent must read from the terminal.
+  if [ -t 2 ] && [ -z "${CI+x}" ]; then
+    exec < /dev/tty
+  fi
   local status=0
   VP_SELF_SETUP_SHELL=sh "$1" || status=$?
   exit "$status"

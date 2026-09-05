@@ -357,6 +357,10 @@ function Invoke-InstallHandoff {
             Exit-Installer -Code $LASTEXITCODE
         }
         Invoke-Expression ($result -join "`n")
+        # A child can update the user PATH, but this session needs the resolved bin directory too.
+        if (($env:Path -split ';') -notcontains $script:ShimDir) {
+            $env:Path = "$script:ShimDir;$env:Path"
+        }
     } finally {
         $env:VP_SELF_SETUP_SHELL = $previousShell
         $env:VP_SELF_SETUP_SUPPORT_CHECK = $previous

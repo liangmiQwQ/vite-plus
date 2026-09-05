@@ -10,6 +10,7 @@ function Assert($Condition, [string]$Message) {
 $testRoot = Join-Path $env:TEMP "vite-bootstrap-test-$(Get-Random)"
 $originalTemp = $env:TEMP
 $originalCheck = $env:VP_SELF_SETUP_SUPPORT_CHECK
+$originalPath = $env:Path
 $fixtureSha = '0123456789012345678901234567890123456789'
 New-Item -ItemType Directory -Path "$testRoot/package", "$testRoot/tmp", "$testRoot/scripts" | Out-Null
 Set-Content -LiteralPath "$testRoot/package/vp.exe" -Value 'Payload fixture'
@@ -74,6 +75,7 @@ function Invoke-InstallHandoff {
 
 try {
     foreach ($scenario in @('supported', 'legacy', 'legacy-failure', 'failure', 'pr')) {
+        $env:Path = $originalPath
         $script:Requests = New-Object 'System.Collections.Generic.List[string]'
         $script:ExitCode = 0
         $script:PackageMetadata = $null
@@ -98,6 +100,11 @@ try {
         }
         $expectedExit = if ($scenario -in @('failure', 'legacy-failure')) { 42 } else { 0 }
         Assert ($script:ExitCode -eq $expectedExit) 'Binary exit code was lost'
+        if ($scenario -eq 'supported') {
+            Assert (($env:Path -split ';')[0] -eq "$testRoot/installed bin") 'Installed bin directory was not added to the current PATH'
+        } elseif ($scenario -eq 'failure') {
+            Assert ($env:Path -eq $originalPath) 'Failed setup changed the current PATH'
+        }
         $usesBinary = $scenario -in @('supported', 'failure')
         Assert ((Test-Path -LiteralPath "$testRoot/binary-invoked") -eq $usesBinary) 'Incorrect binary invocation'
         Assert ((Test-Path -LiteralPath "$testRoot/legacy") -eq (-not $usesBinary)) 'Incorrect legacy invocation'
@@ -112,6 +119,7 @@ try {
     }
 } finally {
     $env:VP_SELF_SETUP_SUPPORT_CHECK = $originalCheck
+    $env:Path = $originalPath
     $env:TEMP = $originalTemp
     Remove-Item -LiteralPath $testRoot -Recurse -Force
     $global:LASTEXITCODE = 0
