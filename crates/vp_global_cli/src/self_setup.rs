@@ -38,8 +38,16 @@ async fn run(source: &Path) -> Result<(), Error> {
     let previous_install = previous_install()?;
     let node_manager = if in_place { NodeManager::Refresh } else { node_manager()? };
     let version = env!("CARGO_PKG_VERSION");
-    let registry =
-        version.starts_with("0.0.0-commit.").then_some("https://registry-bridge.viteplus.dev/");
+    let registry = std::env::var(env_vars::NPM_CONFIG_REGISTRY_UPPER)
+        .or_else(|_| std::env::var(env_vars::NPM_CONFIG_REGISTRY))
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            version
+                .starts_with("0.0.0-commit.")
+                .then(|| "https://registry-bridge.viteplus.dev/".to_string())
+        });
+    let registry = registry.as_deref();
     // The local bootstrap provisions JS dependencies itself after this invocation.
     let skip_deps = std::env::var_os("VP_SKIP_DEPS_INSTALL").is_some_and(|value| !value.is_empty());
     let local_version = skip_deps.then(|| std::env::var("VP_VERSION").ok()).flatten();
@@ -111,7 +119,9 @@ async fn run(source: &Path) -> Result<(), Error> {
     if !in_place {
         // Prepare the payload first, then let the old uninstaller clean its shell entries before writing ours.
         remove_previous_install(previous_install.as_deref()).await?;
-        shell::configure().await?;
+        if std::env::var(env_vars::VP_SELF_SETUP_NO_MODIFY_PATH).as_deref() != Ok("1") {
+            shell::configure().await?;
+        }
     }
     let mode = match node_manager {
         NodeManager::Enable => Some(config::ShimMode::Managed),

@@ -200,6 +200,9 @@ pub const VP_DUMP_DIRS: &str = "VP_DUMP_DIRS";
 /// Bootstrap capability probe; presence requests only the self-setup contract.
 pub const VP_SELF_SETUP_SUPPORT_CHECK: &str = "VP_SELF_SETUP_SUPPORT_CHECK";
 
+/// Skip persistent shell/PATH changes during first-start installation.
+pub const VP_SELF_SETUP_NO_MODIFY_PATH: &str = "VP_SELF_SETUP_NO_MODIFY_PATH";
+
 /// Keys in [`VP_DUMP_DIRS`] output. Each value uses one `<key>\t<value>` line.
 /// The `vp_global_cli` printer and `vp-setup` parser share these values.
 /// `install.sh` and `install.ps1` use the same keys.

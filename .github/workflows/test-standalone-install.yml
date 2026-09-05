@@ -1753,10 +1753,11 @@ jobs:
           }
           & $vp --version
 
-      - name: Start local preview registry for vp-setup.exe
+      - name: Start local registry for vp-setup.exe
         shell: bash
         run: |
-          test_version="0.0.0-commit.${GITHUB_SHA}"
+          # Self-setup installs the version compiled into the downloaded binary.
+          test_version=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/vp_global_cli/Cargo.toml | head -1)
           registry_root="$RUNNER_TEMP/vp-setup-local-registry"
           packages_dir="$registry_root/packages"
           main_dir="$registry_root/vite-plus"
@@ -1826,6 +1827,7 @@ jobs:
           $installer = Join-Path $env:DEV_DRIVE "target/release/vp-setup.exe"
           $stdout = Join-Path $env:RUNNER_TEMP "vp-setup-no-color.stdout.txt"
           $stderr = Join-Path $env:RUNNER_TEMP "vp-setup-no-color.stderr.txt"
+          $pathBefore = [Environment]::GetEnvironmentVariable("Path", "User")
           $env:NO_COLOR = "1"
           try {
             $process = Start-Process -FilePath $installer `
@@ -1857,6 +1859,37 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $env:VP_HOME "bin/vp.exe"))) {
             throw "vp-setup.exe did not create the global vp.exe"
+          }
+          if (-not (Test-Path (Join-Path $env:VP_HOME "current/bin/.vp-setup-complete"))) {
+            throw "vp-setup.exe did not complete the binary's self-setup"
+          }
+          if ([Environment]::GetEnvironmentVariable("Path", "User") -cne $pathBefore) {
+            throw "--no-modify-path changed User PATH"
+          }
+          $config = Get-Content (Join-Path $env:VP_HOME "config.json") -Raw | ConvertFrom-Json
+          if ($config.nodeShimMode -ne "system_first") {
+            throw "--no-node-manager was not passed to self-setup"
+          }
+
+      - name: Quiet same-version installation uses self-setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Join-Path $env:DEV_DRIVE "target/release/vp-setup.exe"
+          $previous = (Get-Item (Join-Path $env:VP_HOME "current")).Target
+          $output = & $installer --quiet --version $env:VP_SETUP_TEST_VERSION `
+            --registry $env:VP_SETUP_TEST_REGISTRY --no-node-manager --no-modify-path 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            throw "Quiet setup failed: $output"
+          }
+          if ($output) {
+            throw "Quiet setup unexpectedly printed output: $output"
+          }
+          if (-not (Test-Path (Join-Path $env:VP_HOME "current/bin/.vp-setup-complete"))) {
+            throw "Quiet setup did not finish"
+          }
+          if ((Get-Item (Join-Path $env:VP_HOME "current")).Target -eq $previous) {
+            throw "Same-version setup did not deploy a fresh binary"
           }
 
       - name: Set PATH
