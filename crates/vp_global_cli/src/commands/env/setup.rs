@@ -55,13 +55,14 @@ impl EnvShell {
 
 /// Execute the setup command.
 pub async fn execute(refresh: bool, env_only: bool) -> Result<ExitStatus, Error> {
-    execute_for_binary(&std::env::current_exe()?, refresh, env_only).await
+    execute_for_binary(&std::env::current_exe()?, refresh, refresh, env_only).await
 }
 
 // Self-setup must create shims for the deployed binary, not the temporary download.
 pub(crate) async fn execute_for_binary(
     current_exe: &std::path::Path,
     refresh: bool,
+    refresh_entrypoints: bool,
     env_only: bool,
 ) -> Result<ExitStatus, Error> {
     let config = vp_shared::EnvConfig::get();
@@ -97,14 +98,16 @@ pub(crate) async fn execute_for_binary(
     tokio::fs::write(bin_dir.join("vp-use.cmd"), vp_use_cmd_content(&config)).await?;
 
     // Create wrapper script in bin/
-    setup_vp_wrapper(current_exe, bin_dir, refresh).await?;
+    setup_vp_wrapper(current_exe, bin_dir, refresh_entrypoints).await?;
 
     // Create default tool shims
     let mut created = Vec::new();
     let mut skipped = Vec::new();
 
     for tool in crate::shim::DEFAULT_SHIM_TOOLS {
-        let result = create_shim(current_exe, bin_dir, tool, refresh).await?;
+        let refresh_tool =
+            if matches!(*tool, "vpx" | "vpr") { refresh_entrypoints } else { refresh };
+        let result = create_shim(current_exe, bin_dir, tool, refresh_tool).await?;
         if result {
             created.push(*tool);
         } else {
@@ -136,7 +139,7 @@ pub(crate) async fn execute_for_binary(
 
     // Best-effort cleanup of .old files from rename-before-copy on Windows
     #[cfg(windows)]
-    if refresh {
+    if refresh || refresh_entrypoints {
         cleanup_old_files(bin_dir).await;
     }
 
@@ -1803,6 +1806,27 @@ mod tests {
                     !pointer.exists(),
                     "setup without --refresh must not claim a skipped executable"
                 );
+
+                // Reusing a bin directory must refresh Vite+ entrypoints without replacing Node.
+                for tool in ["vp", "vpx", "vpr"] {
+                    tokio::fs::write(bin_dir.join(format!("{tool}.exe")), b"old-entrypoint")
+                        .await
+                        .unwrap();
+                    tokio::fs::write(bin_dir.join(format!("{tool}.shim")), b"old-data-root")
+                        .await
+                        .unwrap();
+                }
+                execute_for_binary(&std::env::current_exe().unwrap(), false, true, false)
+                    .await
+                    .unwrap();
+                let dirs = &vp_shared::EnvConfig::get().dirs;
+                for tool in ["vp", "vpx", "vpr"] {
+                    let entrypoint = bin_dir.join(format!("{tool}.exe"));
+                    assert_eq!(tokio::fs::read(&entrypoint).await.unwrap(), b"fake-trampoline");
+                    assert!(dirs.owns_windows_trampoline(&entrypoint));
+                }
+                assert_eq!(tokio::fs::read(&node).await.unwrap(), b"foreign-node");
+                assert!(!pointer.exists());
             },
         )
         .await;

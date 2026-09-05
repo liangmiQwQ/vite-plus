@@ -72,6 +72,21 @@ async fn run(source: &Path) -> Result<(), Error> {
     let dirs = &env.dirs;
     let active_binary = dirs.data.join("current").join("bin").join(VP_BINARY_NAME);
     let in_place = same_file::is_same_file(source, active_binary.as_path()).unwrap_or(false);
+    #[cfg(windows)]
+    if !in_place
+        && ["vp.exe", "vpx.exe", "vpr.exe"]
+            .iter()
+            .any(|name| std::fs::symlink_metadata(dirs.bin.join(name)).is_ok())
+        && !env.is_ci
+        && !confirm(
+            &format!("Replace existing Vite+ commands in {}?", dirs.bin.as_path().display()),
+            false,
+        )?
+    {
+        return Err(Error::Other(
+            "Installation cancelled; existing Vite+ commands were kept.".into(),
+        ));
+    }
     let previous_install = previous_install()?;
     let node_manager = if in_place { NodeManager::Refresh } else { node_manager()? };
     let version = env!("CARGO_PKG_VERSION");
@@ -157,7 +172,12 @@ async fn run(source: &Path) -> Result<(), Error> {
         // Prepare the payload first, then let the old uninstaller clean its shell entries before writing ours.
         remove_previous_install(previous_install.as_deref()).await?;
         if std::env::var(env_vars::VP_SELF_SETUP_NO_MODIFY_PATH).as_deref() != Ok("1") {
-            shell::configure().await?;
+            if let Err(error) = shell::configure().await {
+                output::warn(&format!(
+                    "Could not configure shell profiles: {error}. Add {} to PATH manually.",
+                    dirs.bin.as_path().display()
+                ));
+            }
         }
     }
     let mode = match node_manager {
@@ -186,7 +206,8 @@ async fn run(source: &Path) -> Result<(), Error> {
     tokio::fs::create_dir_all(&dirs.bin).await?;
     // Declining management must preserve foreign executables in a shared bin directory.
     let refresh = node_manager != NodeManager::SystemFirst;
-    setup::execute_for_binary(binary.as_path(), refresh, false).await?;
+    // Windows entrypoints must point at this installation even when Node management is declined.
+    setup::execute_for_binary(binary.as_path(), refresh, cfg!(windows) || refresh, false).await?;
     if !in_place {
         let name = version_dir
             .as_path()
