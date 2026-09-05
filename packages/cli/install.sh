@@ -459,6 +459,10 @@ run_legacy_installer() (
 
 handoff_install() (
   unset VP_SELF_SETUP_SUPPORT_CHECK
+  # Preview dependencies must use the same registry as the downloaded binary.
+  if [ -n "$PR_VERSION" ]; then
+    export NPM_CONFIG_REGISTRY="$BRIDGE_REGISTRY"
+  fi
   # curl | bash leaves stdin on the script pipe; setup consent must read from the terminal.
   if [ -t 2 ] && [ -z "${CI+x}" ]; then
     exec < /dev/tty

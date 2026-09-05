@@ -11,6 +11,7 @@ $testRoot = Join-Path $env:TEMP "vite-bootstrap-test-$(Get-Random)"
 $originalTemp = $env:TEMP
 $originalCheck = $env:VP_SELF_SETUP_SUPPORT_CHECK
 $originalPath = $env:Path
+$originalRegistry = $env:NPM_CONFIG_REGISTRY
 $fixtureSha = '0123456789012345678901234567890123456789'
 New-Item -ItemType Directory -Path "$testRoot/package", "$testRoot/tmp", "$testRoot/scripts" | Out-Null
 Set-Content -LiteralPath "$testRoot/package/vp.exe" -Value 'Payload fixture'
@@ -20,6 +21,7 @@ if ($args.Count -eq 0) {
     New-Item -ItemType File -Path "$testRoot/binary-invoked" | Out-Null
     if ($scenario -eq 'failure') { exit 42 }
     if ($env:VP_SELF_SETUP_SHELL -ne 'powershell') { exit 98 }
+    if ($scenario -eq 'supported-pr' -and $env:NPM_CONFIG_REGISTRY -ne 'https://registry-bridge.viteplus.dev/') { exit 97 }
     Write-Output ("`$script:InstallDir = '{0}'" -f "$testRoot/data")
     Write-Output ("`$script:ShimDir = '{0}'" -f "$testRoot/installed bin")
     Write-Output ("`$script:CacheDir = '{0}'" -f "$testRoot/cache")
@@ -74,8 +76,9 @@ function Invoke-InstallHandoff {
 }
 
 try {
-    foreach ($scenario in @('supported', 'legacy', 'legacy-failure', 'failure', 'pr')) {
+    foreach ($scenario in @('supported', 'legacy', 'legacy-failure', 'failure', 'pr', 'supported-pr')) {
         $env:Path = $originalPath
+        $env:NPM_CONFIG_REGISTRY = 'https://custom.example'
         $script:Requests = New-Object 'System.Collections.Generic.List[string]'
         $script:ExitCode = 0
         $script:PackageMetadata = $null
@@ -87,8 +90,9 @@ try {
                 $LocalTgz = $LocalBinary = $PrVersion = $PrCommitVersion = $null
                 $NpmRegistry = 'https://custom.example'
                 $InstallerDirectory = "$testRoot/scripts"
-                if ($scenario -eq 'pr') { $PrVersion = '2406' }
+                if ($scenario -in @('pr', 'supported-pr')) { $PrVersion = '2406' }
                 Main
+                Assert ($env:NPM_CONFIG_REGISTRY -eq 'https://custom.example') 'Setup changed the caller registry'
                 Assert ($script:InstallDir -eq "$testRoot/data") 'InstallDir was lost'
                 Assert ($script:ShimDir -eq "$testRoot/installed bin") 'ShimDir was lost'
                 Assert ($script:CacheDir -eq "$testRoot/cache") 'CacheDir was lost'
@@ -105,7 +109,7 @@ try {
         } elseif ($scenario -eq 'failure') {
             Assert ($env:Path -eq $originalPath) 'Failed setup changed the current PATH'
         }
-        $usesBinary = $scenario -in @('supported', 'failure')
+        $usesBinary = $scenario -in @('supported', 'supported-pr', 'failure')
         Assert ((Test-Path -LiteralPath "$testRoot/binary-invoked") -eq $usesBinary) 'Incorrect binary invocation'
         Assert ((Test-Path -LiteralPath "$testRoot/legacy") -eq (-not $usesBinary)) 'Incorrect legacy invocation'
         if ($scenario -eq 'pr') {
@@ -120,6 +124,7 @@ try {
 } finally {
     $env:VP_SELF_SETUP_SUPPORT_CHECK = $originalCheck
     $env:Path = $originalPath
+    $env:NPM_CONFIG_REGISTRY = $originalRegistry
     $env:TEMP = $originalTemp
     Remove-Item -LiteralPath $testRoot -Recurse -Force
     $global:LASTEXITCODE = 0

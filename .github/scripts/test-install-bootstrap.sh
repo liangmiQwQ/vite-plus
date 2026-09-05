@@ -31,6 +31,9 @@ if [ "$#" -eq 0 ]; then
   touch "$test_root/binary-invoked"
   if [ "$scenario" = failure ]; then exit 42; fi
   test "${VP_SELF_SETUP_SHELL:-}" = sh || exit 98
+  if [ "$scenario" = supported-pr ]; then
+    test "$NPM_CONFIG_REGISTRY" = https://registry-bridge.viteplus.dev/ || exit 97
+  fi
   printf 'INSTALL_DIR=%q\n' "$test_root/data"
   printf 'SHIM_DIR=%q\n' "$test_root/installed bin"
   printf 'CACHE_DIR=%q\n' "$test_root/cache"
@@ -60,7 +63,7 @@ curl() {
   esac
 }
 
-for scenario in supported legacy legacy-failure piped-legacy piped-legacy-failure failure pr; do
+for scenario in supported legacy legacy-failure piped-legacy piped-legacy-failure failure pr supported-pr; do
   export scenario
   : > "$test_root/requests"
   rm -f "$test_root/legacy" "$test_root/binary-invoked"
@@ -70,14 +73,16 @@ for scenario in supported legacy legacy-failure piped-legacy piped-legacy-failur
     VP_VERSION=latest
     LOCAL_TGZ="" LOCAL_BINARY="" PR_VERSION="" PACKAGE_METADATA=""
     NPM_REGISTRY=https://custom.example
+    export NPM_CONFIG_REGISTRY="$NPM_REGISTRY"
     INSTALLER_PATH="$test_root/scripts/install.sh"
     if [[ "$scenario" == piped-legacy* ]]; then
       INSTALLER_PATH=""
       LEGACY_INSTALLER_URL="file://$test_root/scripts/install-legacy.sh"
     fi
-    if [ "$scenario" = pr ]; then PR_VERSION=2406; fi
+    if [[ "$scenario" == *pr ]]; then PR_VERSION=2406; fi
     if [ "$scenario" = supported ]; then export VP_SELF_SETUP_SUPPORT_CHECK=original; fi
     main
+    test "$NPM_CONFIG_REGISTRY" = https://custom.example
     test "$INSTALL_DIR" = "$test_root/data"
     test "$SHIM_DIR" = "$test_root/installed bin"
     test "$CACHE_DIR" = "$test_root/cache"
@@ -95,7 +100,7 @@ for scenario in supported legacy legacy-failure piped-legacy piped-legacy-failur
     exit 1
   fi
   case "$scenario" in
-    supported|failure)
+    supported|supported-pr|failure)
       test -f "$test_root/binary-invoked"
       test ! -f "$test_root/legacy" ;;
     legacy|legacy-failure|piped-legacy|piped-legacy-failure|pr)
