@@ -4,6 +4,7 @@ mod shell;
 
 use std::path::Path;
 
+use dialoguer::{Confirm, theme::ColorfulTheme};
 use vp_setup::{SELF_SETUP_MARKER, VP_BINARY_NAME, install};
 use vp_shared::{EnvConfig, env_vars, output};
 use vt_path::{AbsolutePath, AbsolutePathBuf};
@@ -244,7 +245,7 @@ fn confirm(prompt: &str, default: bool) -> Result<bool, Error> {
     if !interactive() {
         return Ok(false);
     }
-    dialoguer::Confirm::new()
+    Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
         .default(default)
         .interact()
