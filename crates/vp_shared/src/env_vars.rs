@@ -197,6 +197,9 @@ pub const VP_INSECURE_TLS: &str = "VP_INSECURE_TLS";
 /// do not implement directory resolution again.
 pub const VP_DUMP_DIRS: &str = "VP_DUMP_DIRS";
 
+/// Bootstrap capability probe; presence requests only the self-setup contract.
+pub const VP_SELF_SETUP_SUPPORT_CHECK: &str = "VP_SELF_SETUP_SUPPORT_CHECK";
+
 /// Keys in [`VP_DUMP_DIRS`] output. Each value uses one `<key>\t<value>` line.
 /// The `vp_global_cli` printer and `vp-setup` parser share these values.
 /// `install.sh` and `install.ps1` use the same keys.

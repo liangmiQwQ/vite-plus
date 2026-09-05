@@ -8,6 +8,8 @@ on:
     paths:
       - 'packages/cli/install.sh'
       - 'packages/cli/install.ps1'
+      - 'packages/cli/install-legacy.sh'
+      - 'packages/cli/install-legacy.ps1'
       - 'packages/tools/src/install-global-cli.ts'
       - 'packages/tools/src/local-npm-registry.ts'
       - 'crates/vp_installer/**'
@@ -149,7 +151,7 @@ jobs:
           sudo apt-get install --no-install-recommends -y fish zsh
 
           # Load installer helpers without invoking main.
-          eval "$(sed '/^main "[$]@"$/d' packages/cli/install.sh)"
+          eval "$(sed '/^main "[$]@"$/d' packages/cli/install-legacy.sh)"
 
           TEST_ROOT=$(mktemp -d)
           export HOME="$TEST_ROOT/home"
@@ -221,7 +223,7 @@ jobs:
       - name: Shell installer rejects an unversioned Node sidecar
         run: |
           set -euo pipefail
-          eval "$(sed '/^main "[$]@"$/d' packages/cli/install.sh)"
+          eval "$(sed '/^main "[$]@"$/d' packages/cli/install-legacy.sh)"
 
           TEST_ROOT=$(mktemp -d)
           TEST_BIN="$TEST_ROOT/bin"
@@ -238,7 +240,7 @@ jobs:
       - name: CI hides shell file warnings
         run: |
           set -euo pipefail
-          eval "$(sed '/^main "[$]@"$/d' packages/cli/install.sh)"
+          eval "$(sed '/^main "[$]@"$/d' packages/cli/install-legacy.sh)"
 
           SHELL_CONFIG=$(mktemp)
           chmod 444 "$SHELL_CONFIG"

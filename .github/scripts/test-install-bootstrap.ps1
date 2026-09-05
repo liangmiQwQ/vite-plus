@@ -1,0 +1,101 @@
+# Run locally on Windows with ./.github/scripts/test-install-bootstrap.ps1; no registry or installed vp needed.
+$ErrorActionPreference = 'Stop'
+$source = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../packages/cli/install.ps1') -Raw
+. ([scriptblock]::Create(($source -replace '(?m)^    Main\r?$', '')))
+function Exit-Installer { param([int]$Code = 1); $script:ExitCode = $Code; throw $script:InstallStopSignal }
+function Assert($Condition, [string]$Message) {
+    if (-not $Condition) { throw $Message }
+}
+
+$testRoot = Join-Path $env:TEMP "vite-bootstrap-test-$(Get-Random)"
+$originalTemp = $env:TEMP
+$originalCheck = $env:VP_SELF_SETUP_SUPPORT_CHECK
+$fixtureSha = '0123456789012345678901234567890123456789'
+New-Item -ItemType Directory -Path "$testRoot/package", "$testRoot/tmp", "$testRoot/scripts" | Out-Null
+Set-Content -LiteralPath "$testRoot/package/vp.exe" -Value 'Payload fixture'
+@'
+if ($args.Count -eq 0) {
+    if (Test-Path Env:VP_SELF_SETUP_SUPPORT_CHECK) { exit 99 }
+    New-Item -ItemType File -Path "$testRoot/binary-invoked" | Out-Null
+    if ($scenario -eq 'failure') { exit 42 }
+    exit 0
+}
+if ($env:VP_SELF_SETUP_SUPPORT_CHECK -ne '1') { exit 99 }
+if ($scenario -in @('legacy', 'pr')) { Write-Output 'Usage: vp [COMMAND]' }
+else { Write-Output 'vite-plus-self-setup-v1' }
+exit 0
+'@ | Set-Content -LiteralPath "$testRoot/package/binary.ps1"
+@'
+param($BinarySource, $ResolvedVersion, $PreviewRef)
+if (-not [System.IO.Path]::IsPathRooted($BinarySource) -or -not (Test-Path -LiteralPath $BinarySource)) { throw 'Invalid payload path' }
+@($ResolvedVersion, $PreviewRef) | Set-Content -LiteralPath "$testRoot/legacy"
+'@ | Set-Content -LiteralPath "$testRoot/scripts/install-legacy.ps1"
+& "$env:SystemRoot\System32\tar.exe" -czf "$testRoot/payload.tgz" -C $testRoot package
+Assert ($LASTEXITCODE -eq 0) 'Could not create fixture'
+$env:TEMP = "$testRoot/tmp"
+
+function Invoke-RestMethod {
+    param($Uri)
+    $script:Requests.Add("GET $Uri")
+    return @{ version = '0.2.9' }
+}
+function Invoke-WebRequest {
+    param($Uri, $Method, $OutFile, [switch]$UseBasicParsing, $ErrorAction)
+    $script:Requests.Add("$Method $Uri")
+    if ($Method -eq 'Head') {
+        return @{ Headers = @{ 'x-commit-key' = "voidzero-dev:vite-plus:$fixtureSha" } }
+    }
+    Copy-Item -LiteralPath "$testRoot/payload.tgz" -Destination $OutFile
+}
+
+# Use an executable script fixture so these checks need no native compiler.
+$probe = ${function:Test-SelfSetupSupport}
+function Test-SelfSetupSupport {
+    param($BinarySource)
+    & $probe -BinarySource (Join-Path (Split-Path $BinarySource) 'binary.ps1')
+}
+$handoff = ${function:Invoke-InstallHandoff}
+function Invoke-InstallHandoff {
+    param($BinarySource)
+    & $handoff -BinarySource (Join-Path (Split-Path $BinarySource) 'binary.ps1')
+}
+
+try {
+    foreach ($scenario in @('supported', 'legacy', 'failure', 'pr')) {
+        $script:Requests = New-Object 'System.Collections.Generic.List[string]'
+        $script:ExitCode = 0
+        $script:PackageMetadata = $null
+        Remove-Item -LiteralPath "$testRoot/legacy", "$testRoot/binary-invoked" -ErrorAction SilentlyContinue
+        $env:VP_SELF_SETUP_SUPPORT_CHECK = if ($scenario -eq 'supported') { 'original' } else { $null }
+        try {
+            & {
+                $ViteVersion = 'latest'
+                $LocalTgz = $LocalBinary = $PrVersion = $PrCommitVersion = $null
+                $NpmRegistry = 'https://custom.example'
+                $InstallerDirectory = "$testRoot/scripts"
+                if ($scenario -eq 'pr') { $PrVersion = '2406' }
+                Main
+            }
+        } catch {
+            if ($scenario -ne 'failure' -or -not (Test-IsInstallStopException $_)) { throw }
+        }
+        $expectedExit = if ($scenario -eq 'failure') { 42 } else { 0 }
+        Assert ($script:ExitCode -eq $expectedExit) 'Binary exit code was lost'
+        $usesBinary = $scenario -in @('supported', 'failure')
+        Assert ((Test-Path -LiteralPath "$testRoot/binary-invoked") -eq $usesBinary) 'Incorrect binary invocation'
+        Assert ((Test-Path -LiteralPath "$testRoot/legacy") -eq (-not $usesBinary)) 'Incorrect legacy invocation'
+        if ($scenario -eq 'pr') {
+            $record = @(Get-Content -LiteralPath "$testRoot/legacy")
+            Assert ($record[0] -eq "0.0.0-commit.$fixtureSha" -and $record[1] -eq '2406') 'Resolved preview identity was lost'
+            Assert ($script:Requests[-1].EndsWith("@$fixtureSha")) 'Payload used a mutable ref'
+            Assert ($script:Requests.Count -eq 2) 'Preview was resolved or downloaded more than once'
+        }
+        Assert (@(Get-ChildItem -LiteralPath "$testRoot/tmp" -Force).Count -eq 0) 'Temporary payload was not cleaned up'
+        Write-Host "PASS: $scenario"
+    }
+} finally {
+    $env:VP_SELF_SETUP_SUPPORT_CHECK = $originalCheck
+    $env:TEMP = $originalTemp
+    Remove-Item -LiteralPath $testRoot -Recurse -Force
+    $global:LASTEXITCODE = 0
+}

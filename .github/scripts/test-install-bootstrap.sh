@@ -1,0 +1,87 @@
+#!/bin/bash
+# Run locally with bash .github/scripts/test-install-bootstrap.sh; no registry or installed vp needed.
+set -eu
+cd "$(dirname "$0")/../.."
+eval "$(sed '/^main "[$]@"$/d' packages/cli/install.sh)"
+
+test_root=$(mktemp -d)
+trap 'rm -rf "$test_root"' EXIT
+export test_root
+mkdir -p "$test_root/package" "$test_root/tmp" "$test_root/scripts"
+touch "$test_root/scripts/install.sh"
+cat > "$test_root/scripts/install-legacy.sh" <<'LEGACY'
+#!/bin/bash
+set -eu
+case "$1" in /*) ;; *) exit 80 ;; esac
+test -f "$1"
+printf '%s\n' "$2" "$3" > "$test_root/legacy"
+LEGACY
+cat > "$test_root/package/vp" <<'BINARY'
+#!/bin/bash
+if [ "$#" -eq 0 ]; then
+  test -z "${VP_SELF_SETUP_SUPPORT_CHECK+x}" || exit 99
+  touch "$test_root/binary-invoked"
+  if [ "$scenario" = failure ]; then exit 42; fi
+  exit 0
+fi
+test "${VP_SELF_SETUP_SUPPORT_CHECK:-}" = 1 || exit 99
+case "$scenario" in
+  legacy|pr) printf 'Usage: vp [COMMAND]\n' ;;
+  *) printf 'vite-plus-self-setup-v1\n' ;;
+esac
+BINARY
+chmod +x "$test_root/package/vp"
+tar czf "$test_root/payload.tgz" -C "$test_root" package
+export TMPDIR="$test_root/tmp"
+fixture_sha=0123456789012345678901234567890123456789
+
+# Only transport is substituted; extraction, probing, and dispatch run normally.
+curl() {
+  printf '%s\n' "$*" >> "$test_root/requests"
+  case "$*" in
+    *-fsSIL*) printf 'x-commit-key: voidzero-dev:vite-plus:%s\r\n' "$fixture_sha" ;;
+    *'https://custom.example/vite-plus/'*) printf '{"version":"0.2.9"}\n' ;;
+    *) cp "$test_root/payload.tgz" "${@: -1}" ;;
+  esac
+}
+
+for scenario in supported legacy failure pr; do
+  export scenario
+  : > "$test_root/requests"
+  rm -f "$test_root/legacy" "$test_root/binary-invoked"
+  set +e
+  (
+    set -e
+    VP_VERSION=latest
+    LOCAL_TGZ="" LOCAL_BINARY="" PR_VERSION="" PACKAGE_METADATA=""
+    NPM_REGISTRY=https://custom.example
+    INSTALLER_PATH="$test_root/scripts/install.sh"
+    if [ "$scenario" = pr ]; then PR_VERSION=2406; fi
+    if [ "$scenario" = supported ]; then export VP_SELF_SETUP_SUPPORT_CHECK=original; fi
+    main
+  ) > "$test_root/output" 2>&1
+  status=$?
+  set -e
+  if [ "$scenario" = failure ]; then
+    test "$status" -eq 42
+  elif [ "$status" -ne 0 ]; then
+    cat "$test_root/output"
+    exit 1
+  fi
+  case "$scenario" in
+    supported|failure)
+      test -f "$test_root/binary-invoked"
+      test ! -f "$test_root/legacy" ;;
+    legacy|pr)
+      test -f "$test_root/legacy"
+      test ! -f "$test_root/binary-invoked" ;;
+  esac
+  if [ "$scenario" = pr ]; then
+    test "$(head -1 "$test_root/legacy")" = "0.0.0-commit.$fixture_sha"
+    test "$(tail -1 "$test_root/legacy")" = 2406
+    grep -q "@$fixture_sha -o" "$test_root/requests"
+    test "$(wc -l < "$test_root/requests" | tr -d ' ')" = 2
+  fi
+  test -z "$(ls -A "$test_root/tmp")"
+  echo "PASS: $scenario"
+done

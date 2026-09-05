@@ -364,6 +364,12 @@ fn dump_dirs_from_env_config() -> bool {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Probe before tracing, directory resolution, or argument dispatch can emit output.
+    if env::var_os(vp_shared::env_vars::VP_SELF_SETUP_SUPPORT_CHECK).is_some() {
+        println!("vite-plus-self-setup-v1");
+        return ExitCode::SUCCESS;
+    }
+
     #[cfg(windows)]
     if let Some(code) = commands::implode::maybe_run_deferred_delete_helper(std::env::args_os()) {
         return ExitCode::from(code);
