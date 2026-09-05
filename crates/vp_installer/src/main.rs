@@ -160,7 +160,7 @@ async fn do_install(opts: &cli::Options, dirs: &VpDirs) -> Result<(), Box<dyn st
         return legacy::install(opts, dirs, &target_version, &data).await;
     }
 
-    // 3. Pipes disable self-setup prompts; the menu has already collected the user's choices.
+    // 3. The menu supplies setup choices; interactive runs may still need release-age consent.
     let mut command = tokio::process::Command::new(binary.as_path());
     command
         .env_remove(vp_shared::env_vars::VP_SELF_SETUP_SUPPORT_CHECK)
@@ -175,7 +175,17 @@ async fn do_install(opts: &cli::Options, dirs: &VpDirs) -> Result<(), Box<dyn st
     if let Some(registry) = opts.registry.as_deref() {
         command.env(vp_shared::env_vars::NPM_CONFIG_REGISTRY_UPPER, registry);
     }
-    if opts.quiet {
+    if !opts.yes && !opts.quiet {
+        let status = command
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .await?;
+        if !status.success() {
+            return Err(format!("Vite+ setup failed ({status})").into());
+        }
+    } else if opts.quiet {
         let output = command.output().await?;
         if !output.status.success() {
             io::stdout().write_all(&output.stdout)?;
