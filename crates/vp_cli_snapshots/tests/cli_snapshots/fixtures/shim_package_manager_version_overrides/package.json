@@ -1,5 +1,0 @@
-{
-  "name": "shim-package-manager-version-overrides",
-  "private": true,
-  "packageManager": "pnpm@10.18.0"
-}
