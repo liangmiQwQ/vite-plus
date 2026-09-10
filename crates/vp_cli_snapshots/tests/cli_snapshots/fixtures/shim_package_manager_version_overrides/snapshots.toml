@@ -8,4 +8,3 @@ steps = [
   { argv = ["node", "check.cjs", "vp", "10.19.0"], comment = "vp install still uses VP_PACKAGE_MANAGER" },
   { argv = ["node", "check.cjs", "pnpm", "10.18.0"], envs = [["VP_PACKAGE_MANAGER", "invalid"]], comment = "An invalid selection does not affect direct shims" },
 ]
-
