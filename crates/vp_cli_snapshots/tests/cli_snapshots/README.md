@@ -214,7 +214,9 @@ is identical on every platform:
 `test -f x && cmd` guards keep their short-circuit), `vpt write-file`,
 `vpt touch-file`, `vpt replace-file-content`, `vpt list-dir`, `vpt mkdir`,
 `vpt rm`, `vpt cp`, `vpt chmod`, `vpt grep-file`, `vpt json-edit`,
-`vpt pipe-stdin <data> -- <argv>`, plus task payloads for `vp run` tests:
+`vpt pipe-stdin <data> -- <argv>`,
+`vpt head-lines <count> -- <argv>` (closes the child's stdout after the selected
+lines), plus task payloads for `vp run` tests:
 `vpt print`, `vpt print-color`, `vpt print-env`, `vpt print-cwd`,
 `vpt print-native-path` (prints OS-native separators, for redaction
 self-tests), `vpt check-tty`, `vpt read-stdin`, `vpt exit <code>`,
@@ -288,10 +290,15 @@ Snapshots are plain-text screen grids: styling is flattened, and redaction
 masks paths, durations, versions, UUIDs, thread counts, byte-size numbers
 (units kept: `<size> kB`), and content-hash asset suffixes (see
 `redact.rs`; sizes and hashes because output bytes differ across OSes). If
-a case produces nondeterministic
-output, fix it with a milestone or a redaction rule; never rerun until
-green. Set
+a case produces nondeterministic output, fix it with controlled fixture data,
+a milestone, or a redaction rule; never rerun until green. Set
 `formatted-snapshot = true` on a step only when the test is about colors.
+
+For registry fallback tests, use `local-registry = true` and a fixture
+`mock-manifest.json` entry such as `"npm/latest"` to control the resolved version.
+Keep the CLI input unpinned so the fallback is still tested, and keep exact
+version assertions. Unmocked registry requests go upstream, so
+`local-registry = true` alone does not freeze dist-tags.
 
 Fixture trees are excluded from repo-wide fmt, lint, typecheck, and vitest
 (`vite.config.ts`, `tsconfig.json`); recorded snapshots and

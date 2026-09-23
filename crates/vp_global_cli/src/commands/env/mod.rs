@@ -24,7 +24,7 @@ mod unpin;
 mod r#use;
 mod which;
 
-use std::process::ExitStatus;
+use std::{io, process::ExitStatus};
 
 #[cfg(windows)]
 pub(crate) use setup::{cleanup_legacy_windows_shim, get_trampoline_path, remove_or_rename_to_old};
@@ -40,8 +40,9 @@ fn print_env_header() {
     vp_shared::header::print_header();
 }
 
+#[deny(clippy::print_stdout)]
 fn print_env_clean_tip() {
-    vp_shared::output::raw("");
+    vp_shared::output::print_and_flush(&mut io::stdout().lock(), "\n");
     vp_shared::output::note(
         "Run `vp env clean` to free disk space from unused managed runtimes and package manager caches.",
     );
@@ -212,8 +213,10 @@ async fn print_env(cwd: AbsolutePathBuf, scope: Option<String>) -> Result<ExitSt
     let snippet = format_path_snippet(detect_shell(), &bin_dirs);
 
     // Print shell snippet
-    println!("# Add to your shell to use this environment for this session:");
-    println!("{snippet}");
+    vp_shared::output::print_stdout_line(format_args!(
+        "# Add to your shell to use this environment for this session:"
+    ));
+    vp_shared::output::print_stdout_line(format_args!("{snippet}"));
 
     Ok(ExitStatus::default())
 }
