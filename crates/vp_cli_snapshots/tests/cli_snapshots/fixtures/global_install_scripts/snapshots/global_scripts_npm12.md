@@ -30,7 +30,7 @@ info: Installing 1 global package with Node.js <version>
   Bins: my-cli
 warning: Lifecycle scripts were skipped for: my-cli, native-addon.
 To allow them, reinstall with:
-  vp install -g my-cli@1.0.0 --ignore-scripts=false
+  vp install -g my-cli@1.0.0 --run-scripts
 ```
 
 ## `my-cli skipped skipped`
@@ -39,7 +39,7 @@ To allow them, reinstall with:
 my-cli: skipped; native-addon: skipped
 ```
 
-## `vp install -g my-cli@1.0.0 --ignore-scripts=false`
+## `vp install -g my-cli@1.0.0 --run-scripts`
 
 ```
 VITE+ - The Unified Toolchain for the Web

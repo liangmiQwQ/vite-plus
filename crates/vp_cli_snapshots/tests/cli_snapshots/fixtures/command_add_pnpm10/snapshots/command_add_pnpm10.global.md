@@ -25,6 +25,7 @@ Options:
   --save-catalog                      Save the new dependency to the default catalog
   --allow-build <NAMES>               A list of package names allowed to run postinstall
   --ignore-scripts                    Do not run lifecycle scripts
+  --run-scripts                       Run all lifecycle scripts (only with -g)
   --no-optional                       Do not install optionalDependencies
   --frozen-lockfile                   Fail if lockfile needs to be updated
   --no-frozen-lockfile                Allow lockfile updates

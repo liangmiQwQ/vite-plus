@@ -49,18 +49,7 @@ pub struct InstallArgs {
     pub(crate) force: bool,
 
     /// Do not run lifecycle scripts
-    #[arg(
-        long,
-        value_name = "BOOL",
-        hide_default_value = true,
-        hide_possible_values = true,
-        action = clap::ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        default_value_t = false,
-        default_value_if("global", "true", "true")
-    )]
+    #[arg(long)]
     pub(crate) ignore_scripts: bool,
 
     /// Don't read or generate lockfile
@@ -118,6 +107,10 @@ pub struct InstallArgs {
     /// Number of global package installs to run in parallel (only with -g)
     #[arg(long, requires = "global", value_parser = parse_positive_usize)]
     pub(crate) concurrency: Option<usize>,
+
+    /// Run all lifecycle scripts (only with -g)
+    #[arg(long, requires = "global", conflicts_with = "ignore_scripts")]
+    pub(crate) run_scripts: bool,
 
     /// Packages to add (if provided, acts as `vp add`)
     pub(crate) packages: Vec<String>,
@@ -219,6 +212,7 @@ impl InstallArgs {
             save_catalog: self.save_catalog,
             allow_build: None,
             ignore_scripts: self.ignore_scripts,
+            run_scripts: self.run_scripts,
             no_optional: self.no_optional,
             frozen_lockfile: self.frozen_lockfile,
             no_frozen_lockfile: self.no_frozen_lockfile,

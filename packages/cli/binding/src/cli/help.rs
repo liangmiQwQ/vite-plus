@@ -14,17 +14,6 @@ use super::types::SynthesizableSubcommand;
 const GLOBAL_ONLY_SUBCOMMANDS: &[&str] = &["env", "upgrade", "implode"];
 
 pub(super) fn handle_cli_parse_error(err: clap::Error) -> Result<ExitStatus, Error> {
-    if matches!(err.kind(), ErrorKind::DisplayHelp) {
-        let help = err.to_string();
-        if help.contains("--ignore-scripts[=<BOOL>]") {
-            // Hide the optional value without shifting clap's description column.
-            let help = help.replace("--ignore-scripts[=<BOOL>]\n", "--ignore-scripts\n");
-            output::raw(
-                help.replace("--ignore-scripts[=<BOOL>]", "--ignore-scripts         ").trim_end(),
-            );
-            return Ok(ExitStatus(err.exit_code() as u8));
-        }
-    }
     if matches!(err.kind(), ErrorKind::InvalidSubcommand) && print_invalid_subcommand_error(&err) {
         return Ok(ExitStatus(err.exit_code() as u8));
     }

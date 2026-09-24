@@ -1,6 +1,6 @@
 # global_scripts_default_and_enable
 
-Global installs and updates skip direct and transitive scripts by default and warn last. Explicit false runs all scripts with the selected Node.js, including Node 20.
+Global installs and updates skip direct and transitive scripts by default and warn last. --run-scripts runs all scripts with the selected Node.js, including Node 20.
 
 ## `vpt mkdir -p tarballs`
 
@@ -29,10 +29,10 @@ info: Installing 2 global packages with Node.js <version>
 ✓ Installed native-addon 1.0.0
 warning: Lifecycle scripts were skipped for: my-cli, native-addon.
 To allow them, reinstall with:
-  vp install -g my-cli@1.0.0 --ignore-scripts=false
+  vp install -g my-cli@1.0.0 --run-scripts
 warning: Lifecycle scripts were skipped for: native-addon.
 To allow them, reinstall with:
-  vp install -g native-addon@1.0.0 --ignore-scripts=false
+  vp install -g native-addon@1.0.0 --run-scripts
 ```
 
 ## `my-cli skipped skipped`
@@ -41,7 +41,7 @@ To allow them, reinstall with:
 my-cli: skipped; native-addon: skipped
 ```
 
-## `npm_config_ignore_scripts=true npm_config_dangerously_allow_all_scripts=false vp install -g my-cli@1.0.0 --ignore-scripts=false`
+## `npm_config_ignore_scripts=true npm_config_dangerously_allow_all_scripts=false vp install -g my-cli@1.0.0 --run-scripts`
 
 ```
 VITE+ - The Unified Toolchain for the Web
@@ -68,7 +68,7 @@ info: Installing 1 global package with Node.js <version>
   Bins: my-cli
 warning: Lifecycle scripts were skipped for: my-cli, native-addon.
 To allow them, reinstall with:
-  vp install -g my-cli@1.0.0 --node <version> --ignore-scripts=false
+  vp install -g my-cli@1.0.0 --node <version> --run-scripts
 ```
 
 ## `my-cli skipped skipped`
@@ -77,7 +77,7 @@ To allow them, reinstall with:
 my-cli: skipped; native-addon: skipped
 ```
 
-## `vp add -g my-cli@1.0.0 --node 20.19.6 --ignore-scripts=false`
+## `vp add -g my-cli@1.0.0 --node 20.19.6 --run-scripts`
 
 ```
 info: Installing 1 global package with Node.js <version>
@@ -99,7 +99,7 @@ info: Updating 1 global package with Node.js <version>
   Bins: my-cli
 warning: Lifecycle scripts were skipped for: my-cli, native-addon.
 To allow them, reinstall with:
-  vp install -g my-cli@2.0.0 --ignore-scripts=false
+  vp install -g my-cli@2.0.0 --run-scripts
 ```
 
 ## `my-cli skipped skipped`
@@ -108,7 +108,7 @@ To allow them, reinstall with:
 my-cli: skipped; native-addon: skipped
 ```
 
-## `vp update -g my-cli@1.0.0 --ignore-scripts=false`
+## `vp update -g my-cli@1.0.0 --run-scripts`
 
 ```
 info: Updating 1 global package with Node.js <version>

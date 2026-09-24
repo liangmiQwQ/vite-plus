@@ -130,15 +130,15 @@ Use these commands when you want package-manager-managed tools available outside
 
 Global installs and updates disable lifecycle scripts by default, including scripts of transitive dependencies. If scripts were skipped, Vite+ prints a warning at the end with a reinstall command.
 
-Use `--ignore-scripts=false` to enable all lifecycle scripts for that invocation, including scripts of transitive dependencies:
+Use `--run-scripts` to enable all lifecycle scripts for that invocation, including scripts of transitive dependencies:
 
 ```bash
-vp install -g my-cli --ignore-scripts=false
-vp add -g my-cli --ignore-scripts=false
-vp update -g my-cli --ignore-scripts=false
+vp install -g my-cli --run-scripts
+vp add -g my-cli --run-scripts
+vp update -g my-cli --run-scripts
 ```
 
-This uses the selected Node.js runtime and its bundled npm. The setting is not saved, so repeat it when updating. To repair an already-installed package, use `vp install -g --ignore-scripts=false` again, since `vp update -g` skips packages that are already up to date.
+This uses the selected Node.js runtime and its bundled npm. The setting is not saved, so repeat it when updating. To repair an already-installed package, use `vp install -g --run-scripts` again, since `vp update -g` skips packages that are already up to date.
 
 :::
 

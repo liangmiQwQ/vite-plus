@@ -32,6 +32,8 @@ Options:
           A list of package names allowed to run postinstall
       --ignore-scripts
           Do not run lifecycle scripts
+      --run-scripts
+          Run all lifecycle scripts (only with -g)
       --no-optional
           Do not install optionalDependencies
       --frozen-lockfile

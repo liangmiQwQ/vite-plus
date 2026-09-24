@@ -24,6 +24,7 @@ Options:
       --offline                    Only use packages already in cache
   -f, --force                      Force reinstall all dependencies
       --ignore-scripts             Do not run lifecycle scripts
+      --run-scripts                Run all lifecycle scripts (only with -g)
       --no-lockfile                Don't read or generate lockfile
       --fix-lockfile               Fix broken lockfile entries (pnpm and yarn@2+ only)
       --shamefully-hoist           Create flat `node_modules` (pnpm only)

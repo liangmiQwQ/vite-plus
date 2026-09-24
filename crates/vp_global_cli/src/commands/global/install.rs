@@ -557,7 +557,7 @@ pub async fn install(
     for (spec, skipped) in script_warnings {
         let spec = quote_install_argument(&spec);
         output::raw_stderr(&format!(
-            "{} Lifecycle scripts were skipped for: {}.\nTo allow them, reinstall with:\n  vp install -g {spec}{node_argument} --ignore-scripts=false",
+            "{} Lifecycle scripts were skipped for: {}.\nTo allow them, reinstall with:\n  vp install -g {spec}{node_argument} --run-scripts",
             style("warning:").for_stderr().yellow().bold(),
             skipped.join(", "),
         ));

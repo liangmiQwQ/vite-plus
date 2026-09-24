@@ -28,18 +28,7 @@ pub struct AddArgs {
     pub(crate) allow_build: Option<String>,
 
     /// Do not run lifecycle scripts
-    #[arg(
-        long,
-        value_name = "BOOL",
-        hide_default_value = true,
-        hide_possible_values = true,
-        action = clap::ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        default_value_t = false,
-        default_value_if("global", "true", "true")
-    )]
+    #[arg(long)]
     pub(crate) ignore_scripts: bool,
 
     /// Do not install optionalDependencies
@@ -115,6 +104,10 @@ pub struct AddArgs {
     /// Number of global package installs to run in parallel (only with -g)
     #[arg(long, requires = "global", value_parser = parse_positive_usize)]
     pub(crate) concurrency: Option<usize>,
+
+    /// Run all lifecycle scripts (only with -g)
+    #[arg(long, requires = "global", conflicts_with = "ignore_scripts")]
+    pub(crate) run_scripts: bool,
 
     /// Packages to add
     #[arg(required = true)]

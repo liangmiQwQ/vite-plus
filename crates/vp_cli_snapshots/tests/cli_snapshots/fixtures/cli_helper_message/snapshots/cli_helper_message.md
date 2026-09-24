@@ -116,6 +116,7 @@ Options:
   --offline                    Only use packages already in cache
   -f, --force                  Force reinstall all dependencies
   --ignore-scripts             Do not run lifecycle scripts
+  --run-scripts                Run all lifecycle scripts (only with -g)
   --no-lockfile                Don't read or generate lockfile
   --fix-lockfile               Fix broken lockfile entries (pnpm and yarn@2+ only)
   --shamefully-hoist           Create flat `node_modules` (pnpm only)
@@ -160,6 +161,7 @@ Options:
   --save-catalog                      Save the new dependency to the default catalog
   --allow-build <NAMES>               A list of package names allowed to run postinstall
   --ignore-scripts                    Do not run lifecycle scripts
+  --run-scripts                       Run all lifecycle scripts (only with -g)
   --no-optional                       Do not install optionalDependencies
   --frozen-lockfile                   Fail if lockfile needs to be updated
   --no-frozen-lockfile                Allow lockfile updates
@@ -228,7 +230,7 @@ Arguments:
 Options:
   -L, --latest                 Update to latest version (ignore semver range)
   -g, --global                 Update global packages
-  --ignore-scripts             Do not run lifecycle scripts (only with -g)
+  --run-scripts                Run all lifecycle scripts (only with -g)
   --concurrency <CONCURRENCY>  Number of global package updates to run in parallel (only with -g)
   --reinstall-node-mismatch    Reinstall up-to-date global packages installed with a different Node.js version
   --ignore-node-mismatch       Skip up-to-date global packages installed with a different Node.js version

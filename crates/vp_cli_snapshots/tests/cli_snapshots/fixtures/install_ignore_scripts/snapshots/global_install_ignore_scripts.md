@@ -39,7 +39,7 @@ info: Installing 1 global package with Node.js <version>
   Bins: scripted-dep
 warning: Lifecycle scripts were skipped for: scripted-dep.
 To allow them, reinstall with:
-  vp install -g ./scripted-dep-1.0.0.tgz --ignore-scripts=false
+  vp install -g ./scripted-dep-1.0.0.tgz --run-scripts
 ```
 
 ## `scripted-dep skipped`
