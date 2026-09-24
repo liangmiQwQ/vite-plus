@@ -178,6 +178,7 @@ pub enum ManagedGlobalCommand<'a> {
     /// Update packages in the managed global store.
     Update {
         packages: &'a [String],
+        ignore_scripts: bool,
         latest: bool,
         concurrency: Option<usize>,
         reinstall_node_mismatch: bool,
@@ -255,6 +256,7 @@ impl PackageManagerCommand {
             }),
             Self::Update(args) if args.global => Some(ManagedGlobalCommand::Update {
                 packages: &args.packages,
+                ignore_scripts: args.ignore_scripts,
                 latest: args.latest,
                 concurrency: args.concurrency,
                 reinstall_node_mismatch: args.reinstall_node_mismatch,
@@ -595,6 +597,8 @@ mod tests {
                 vec![command, "-g", "react"],
                 vec![command, "-g", "--ignore-scripts", "react"],
                 vec![command, "-g", "react", "--ignore-scripts"],
+                vec![command, "-g", "react", "--ignore-scripts=false"],
+                vec![command, "--ignore-scripts=false", "-g", "react"],
             ] {
                 let parsed = parse(&input).unwrap();
                 let Some(ManagedGlobalCommand::Install { ignore_scripts, .. }) =
@@ -602,7 +606,7 @@ mod tests {
                 else {
                     panic!("expected managed install command: {input:?}");
                 };
-                assert_eq!(ignore_scripts, input.contains(&"--ignore-scripts"), "{input:?}");
+                assert_eq!(ignore_scripts, !input.contains(&"--ignore-scripts=false"), "{input:?}");
             }
         }
     }

@@ -16,6 +16,10 @@ pub struct UpdateArgs {
     #[arg(short = 'g', long)]
     pub(crate) global: bool,
 
+    /// Do not run lifecycle scripts (only with -g)
+    #[arg(long, value_name = "BOOL", requires = "global", hide_default_value = true, hide_possible_values = true, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value_t = true)]
+    pub(crate) ignore_scripts: bool,
+
     /// Number of global package updates to run in parallel (only with -g)
     #[arg(long, requires = "global", value_parser = parse_positive_usize)]
     pub(crate) concurrency: Option<usize>,

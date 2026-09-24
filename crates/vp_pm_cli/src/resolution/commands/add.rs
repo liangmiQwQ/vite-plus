@@ -28,7 +28,18 @@ pub struct AddArgs {
     pub(crate) allow_build: Option<String>,
 
     /// Do not run lifecycle scripts
-    #[arg(long)]
+    #[arg(
+        long,
+        value_name = "BOOL",
+        hide_default_value = true,
+        hide_possible_values = true,
+        action = clap::ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        default_value_t = false,
+        default_value_if("global", "true", "true")
+    )]
     pub(crate) ignore_scripts: bool,
 
     /// Do not install optionalDependencies

@@ -23,7 +23,7 @@ Options:
       --prefer-offline             Use cached packages when available
       --offline                    Only use packages already in cache
   -f, --force                      Force reinstall all dependencies
-      --ignore-scripts             Do not run lifecycle scripts
+      --ignore-scripts[=<BOOL>]    Do not run lifecycle scripts
       --no-lockfile                Don't read or generate lockfile
       --fix-lockfile               Fix broken lockfile entries (pnpm and yarn@2+ only)
       --shamefully-hoist           Create flat `node_modules` (pnpm only)
