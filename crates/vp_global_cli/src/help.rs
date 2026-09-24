@@ -537,6 +537,8 @@ pub fn print_unified_clap_help_for_path(command_path: &[&str]) -> bool {
         _ => return false,
     };
 
+    // Keep the flag's original help label while accepting explicit boolean values.
+    let raw_help = raw_help.replace("--ignore-scripts[=<BOOL>]", "--ignore-scripts");
     let Some(doc) = parse_clap_help_to_doc(&raw_help) else {
         return false;
     };

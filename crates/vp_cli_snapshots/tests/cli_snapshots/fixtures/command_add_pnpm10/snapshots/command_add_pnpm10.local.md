@@ -30,7 +30,7 @@ Options:
           Save the new dependency to the default catalog
       --allow-build <NAMES>
           A list of package names allowed to run postinstall
-      --ignore-scripts[=<BOOL>]
+      --ignore-scripts
           Do not run lifecycle scripts
       --no-optional
           Do not install optionalDependencies
