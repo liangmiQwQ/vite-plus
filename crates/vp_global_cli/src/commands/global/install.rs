@@ -624,6 +624,7 @@ async fn install_one(
         return Err(Error::Other(format!("npm install failed with {}", output.status).into()));
     }
 
+    // 3. Inspect the installed packages for skipped scripts and binary metadata.
     let node_modules_dir = get_node_modules_dir(&install_dir, package_name);
     let skipped_scripts = if ignore_scripts {
         // --ignore-scripts suppresses npm's blocked-script report, so inspect the installed tree.
