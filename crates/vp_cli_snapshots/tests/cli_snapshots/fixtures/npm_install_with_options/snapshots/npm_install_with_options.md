@@ -24,7 +24,6 @@ Options:
       --offline                    Only use packages already in cache
   -f, --force                      Force reinstall all dependencies
       --ignore-scripts             Do not run lifecycle scripts
-      --run-scripts                Run all lifecycle scripts (only with -g)
       --no-lockfile                Don't read or generate lockfile
       --fix-lockfile               Fix broken lockfile entries (pnpm and yarn@2+ only)
       --shamefully-hoist           Create flat `node_modules` (pnpm only)
@@ -39,6 +38,7 @@ Options:
   -g, --global                     Install globally (requires package names)
       --node <NODE>                Node.js version to use for global installation (only with -g)
       --concurrency <CONCURRENCY>  Number of global package installs to run in parallel (only with -g)
+      --run-scripts                Run all lifecycle scripts (only with -g)
   -h, --help                       Print help
 ```
 
