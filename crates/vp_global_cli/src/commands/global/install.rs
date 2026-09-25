@@ -718,7 +718,12 @@ async fn collect_skipped_scripts(node_modules: &AbsolutePath) -> Result<Vec<Stri
                 continue;
             }
             // Linked local packages can form cycles through their node_modules.
-            let real_path = tokio::fs::canonicalize(&package_dir).await?;
+            let real_path = match tokio::fs::canonicalize(&package_dir).await {
+                Ok(real_path) => real_path,
+                // Local packages can retain dangling dependency links unrelated to this install.
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
             if !visited.insert(real_path) {
                 continue;
             }

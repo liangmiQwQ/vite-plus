@@ -1,4 +1,16 @@
 [[case]]
+name = "global_scripts_dangling_dependency"
+vp = "global"
+comment = "A dangling dependency link in a local package must not prevent global installation or skipped-script warnings."
+steps = [
+  { argv = ["vpt", "mkdir", "-p", "local-cli/node_modules"], snapshot = false },
+  { argv = ["node", "-e", "require('node:fs').symlinkSync(require('node:path').resolve('removed-package'), 'local-cli/node_modules/unused-link', process.platform === 'win32' ? 'junction' : 'dir')"], snapshot = false },
+  ["vp", "install", "-g", "./local-cli"],
+  ["local-cli"],
+  ["vpt", "stat-file", "local-cli/postinstall-ran", "--assert", "missing"],
+]
+
+[[case]]
 name = "global_scripts_default_and_enable"
 vp = "global"
 local-registry = true
