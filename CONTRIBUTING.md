@@ -2,12 +2,31 @@
 
 ## Initial Setup
 
-### macOS / Linux
-
 You'll need the following tools installed on your system:
 
+- Node.js (version specified in [`.node-version`](.node-version))
+- pnpm (version specified in the `packageManager` field of [`package.json`](package.json))
+- Just
+- CMake
+- Rust and Cargo
+- cargo-binstall
+
+If you haven't installed Node.js and pnpm, we recommend using Vite+ to manage them. See [environment management](docs/guide/env.md) for details.
+
+### macOS / Linux
+
+If you need Node.js and pnpm, install Vite+ and enable environment management when prompted:
+
 ```bash
-brew install pnpm node just cmake
+curl -fsSL https://vite.plus | bash
+```
+
+After installing Vite+, restart your terminal to activate the `node` and `pnpm` shims.
+
+You'll also need Just and CMake:
+
+```bash
+brew install just cmake
 ```
 
 Install Rust & Cargo using rustup:
@@ -25,10 +44,18 @@ just init
 
 ### Windows
 
-You'll need the following tools installed on your system. You can use [winget](https://learn.microsoft.com/en-us/windows/package-manager/).
+If you need Node.js and pnpm, install Vite+ and enable environment management when prompted:
 
 ```powershell
-winget install pnpm.pnpm OpenJS.NodeJS.LTS Casey.Just Kitware.CMake
+irm https://viteplus.dev/install.ps1 | iex
+```
+
+After installing Vite+, restart your terminal to activate the `node` and `pnpm` shims.
+
+You'll also need Just and CMake. You can install them using [winget](https://learn.microsoft.com/en-us/windows/package-manager/):
+
+```powershell
+winget install Casey.Just Kitware.CMake
 ```
 
 Install Rust & Cargo from [rustup.rs](https://rustup.rs/), then install `cargo-binstall`:
