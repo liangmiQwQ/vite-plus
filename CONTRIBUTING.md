@@ -200,31 +200,6 @@ gh extension install github/gh-stack
 
 Stacked pull requests require all branches to be in this repository; GitHub does not support cross-fork stacks ([reference](https://docs.github.com/en/pull-requests/reference/stacked-pull-requests)). If you contribute from a fork, split large work into a sequence of standalone PRs instead.
 
-## Verified Commits
-
-All commits in PR branches should be GitHub-verified so reviewers can confirm commit authenticity.
-
-Set up local commit signing and GitHub verification first:
-
-- Follow GitHub's guide for GPG commit signature verification: https://docs.github.com/en/authentication/managing-commit-signature-verification/about-commit-signature-verification#gpg-commit-signature-verification
-
-After setup, re-sign any existing commits in your branch so the full branch is verified:
-
-```bash
-# Re-sign each commit on your branch (replace origin/main with your branch base if needed)
-git rebase -i origin/main
-# At each stop:
-git commit --amend --date=now --no-edit -S
-# Then continue:
-git rebase --continue
-```
-
-When done, force-push the updated branch history:
-
-```bash
-git push --force-with-lease
-```
-
 ## Release and recovery
 
 The [release workflow](.github/workflows/release.yml) publishes packages in dependency order: platform packages → `@voidzero-dev/vite-plus-core` → `vite-plus`. After each tier, it waits up to 10 minutes for the exact versions and their tarballs to become available. It then waits another 60 seconds for CDN propagation.
