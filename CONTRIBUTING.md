@@ -11,14 +11,14 @@ You'll need the following tools installed on your system:
 - Rust and Cargo
 - cargo-binstall
 
-If you haven't installed Node.js and pnpm, we recommend using Vite+ to manage them. See [environment management](docs/guide/env.md) for details.
+If you haven't installed Node.js and pnpm, we recommend using Vite+ to manage them. See [environment management](https://viteplus.dev/guide/env) for details.
 
 ### macOS / Linux
 
-If you need Node.js and pnpm, install Vite+ and enable environment management when prompted:
+If you haven't installed Node.js and pnpm, we recommend installing them with Vite+:
 
 ```bash
-curl -fsSL https://vite.plus | bash
+curl -fsSL https://vite.plus | VP_NODE_MANAGER=yes VP_PM_MANAGER=yes bash
 ```
 
 After installing Vite+, restart your terminal to activate the `node` and `pnpm` shims.
@@ -44,9 +44,11 @@ just init
 
 ### Windows
 
-If you need Node.js and pnpm, install Vite+ and enable environment management when prompted:
+If you haven't installed Node.js and pnpm, we recommend installing them with Vite+:
 
 ```powershell
+$env:VP_NODE_MANAGER = "yes"
+$env:VP_PM_MANAGER = "yes"
 irm https://viteplus.dev/install.ps1 | iex
 ```
 
