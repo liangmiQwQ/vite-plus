@@ -5,5 +5,5 @@ steps = [
   { argv = ["vp", "install", "-g", "--concurrency", "1", "./parallel-pkg-a", "./parallel-pkg-b"], comment = "Install multiple global packages", formatted-snapshot = true, continue-on-failure = true },
   { argv = ["parallel-a"], comment = "Both binaries should be callable" },
   { argv = ["parallel-b"], continue-on-failure = true },
-  { argv = ["vp", "remove", "-g", "parallel-pkg-a", "parallel-pkg-b"], comment = "Removal uses the same success marker and package styling as installation", formatted-snapshot = true, continue-on-failure = true },
+  { argv = ["vp", "remove", "-g", "parallel-pkg-a", "parallel-pkg-b"], comment = "Installation and removal use plus/minus markers and the same package styling", formatted-snapshot = true, continue-on-failure = true },
 ]
