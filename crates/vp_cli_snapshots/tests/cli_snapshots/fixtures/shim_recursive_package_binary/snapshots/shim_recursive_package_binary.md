@@ -26,5 +26,5 @@ inner call succeeded
 Cleanup
 
 ```
-Uninstalled recursive-cli-pkg
+✓ Uninstalled recursive-cli-pkg
 ```

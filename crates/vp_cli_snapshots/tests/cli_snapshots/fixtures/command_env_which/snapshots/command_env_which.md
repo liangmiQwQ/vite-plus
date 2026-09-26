@@ -75,7 +75,7 @@ VITE+ - The Unified Toolchain for the Web
 Cleanup
 
 ```
-Uninstalled cowsay
+✓ Uninstalled cowsay
 ```
 
 ## `vp env which unknown-tool`

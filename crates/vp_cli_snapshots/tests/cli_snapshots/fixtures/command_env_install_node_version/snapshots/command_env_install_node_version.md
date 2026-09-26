@@ -25,7 +25,7 @@ Node major: 22
 Cleanup
 
 ```
-Uninstalled command-env-install-node-version-pkg
+✓ Uninstalled command-env-install-node-version-pkg
 ```
 
 ## `vp install -g --node 20 ./command-env-install-node-version-pkg`
@@ -53,5 +53,5 @@ Node major: 20
 Cleanup
 
 ```
-Uninstalled command-env-install-node-version-pkg
+✓ Uninstalled command-env-install-node-version-pkg
 ```

@@ -25,7 +25,7 @@ LTS major >= 20: true
 Cleanup
 
 ```
-Uninstalled command-env-install-version-alias-pkg
+✓ Uninstalled command-env-install-version-alias-pkg
 ```
 
 ## `vp install -g --node latest ./command-env-install-version-alias-pkg`
@@ -53,5 +53,5 @@ Latest major >= 20: true
 Cleanup
 
 ```
-Uninstalled command-env-install-version-alias-pkg
+✓ Uninstalled command-env-install-version-alias-pkg
 ```

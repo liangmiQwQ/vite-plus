@@ -1044,7 +1044,7 @@ pub async fn uninstall(package_name: &str, dry_run: bool) -> Result<(), Error> {
     // Remove metadata file
     PackageMetadata::delete(&package_name).await?;
 
-    output::raw(&format!("Uninstalled {}", package_name));
+    output::success(&format!("Uninstalled {}", style(&package_name).bold()));
 
     Ok(())
 }

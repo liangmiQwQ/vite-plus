@@ -18,7 +18,7 @@ warn: Package 'conflict-pkg' provides 'node' binary, but it conflicts with a bui
 Cleanup
 
 ```
-Uninstalled conflict-pkg
+✓ Uninstalled conflict-pkg
 ```
 
 ## `vp install -g --node 20 ./conflict-pkg`
@@ -39,5 +39,5 @@ warn: Package 'conflict-pkg' provides 'node' binary, but it conflicts with a bui
 Cleanup
 
 ```
-Uninstalled conflict-pkg
+✓ Uninstalled conflict-pkg
 ```

@@ -41,7 +41,7 @@ Skipped 'npm-global-linked-cli': managed by `vp install -g npm-global-linked-pkg
 Cleanup
 
 ```
-Uninstalled npm-global-linked-pkg
+✓ Uninstalled npm-global-linked-pkg
 ```
 
 ## `vpt stat-file $VP_HOME/bin/npm-global-linked-cli`

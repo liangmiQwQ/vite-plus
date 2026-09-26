@@ -52,5 +52,5 @@ npm-global-vp-managed-cli works
 Cleanup
 
 ```
-Uninstalled npm-global-vp-managed-pkg
+✓ Uninstalled npm-global-vp-managed-pkg
 ```
