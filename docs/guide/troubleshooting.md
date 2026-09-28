@@ -3,7 +3,7 @@
 Use this page when something in Vite+ is not behaving the way you expect.
 
 ::: info
-Vite+ is in beta: stable, but not yet complete. We are adding features on the road to 1.0 and prioritize community feedback, so please [reach out](#asking-for-help) if something does not work as expected.
+Vite+ 1.0 is available. We continue to improve it and welcome community feedback, so please [reach out](#asking-for-help) if something does not work as expected.
 :::
 
 ## Supported Tool Versions
@@ -26,7 +26,7 @@ The Oxlint type checker path powered by `tsgolint` does not support `baseUrl`. `
 
 ## Nested lint or format config is not applied
 
-When running `vp lint`, `vp fmt`, or `vp check`, configs in subdirectories do not override settings for individual files. Commands run from a package directory still use the workspace-root `lint` and `fmt` blocks when they exist. Use `-c <path>` or `--config <path>` with `vp lint` or `vp fmt` to select another config. If the root config has no block for that tool, the tool uses native discovery from the working directory.
+When running `vp lint`, `vp fmt`, or `vp check`, configs in subdirectories do not override settings for individual files. `vp lint` and `vp fmt` let Oxlint and Oxfmt discover configuration from the working directory, so a `lint` or `fmt` block in a package config takes effect when run from that package, which we do not recommend. `vp check` selects the workspace-root `lint` and `fmt` blocks when they exist. Use `-c <path>` or `--config <path>` with `vp lint` or `vp fmt` to select another config explicitly.
 
 Keep lint and format settings in the root `vite.config.ts`. Use [`lint.overrides`](/guide/monorepo#root-config-with-overrides) and [`fmt.overrides`](/guide/monorepo#format-overrides) for file- or package-specific settings. You can also [import configuration objects](/guide/monorepo#composing-configuration-files) into the root config to keep settings in separate files.
 

@@ -1,6 +1,6 @@
 [package]
 name = "vite-plus-cli"
-version = "1.0.0-rc.0"
+version = "1.0.0"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -39,6 +39,7 @@ vp_static_config = { workspace = true }
 vp_toolchain = { workspace = true }
 vt_str = { workspace = true }
 vt = { workspace = true }
+vt_casefold = { workspace = true }
 vt_workspace = { workspace = true }
 rolldown_binding = { workspace = true, optional = true, features = ["disable_panic_hook"] }
 

@@ -1,8 +1,7 @@
 mod analysis;
 
-use std::{ffi::OsStr, sync::Arc, time::Instant};
+use std::{sync::Arc, time::Instant};
 
-use rustc_hash::FxHashMap;
 use vp_error::Error;
 use vp_shared::output;
 use vt::ExitStatus;
@@ -14,7 +13,8 @@ use self::analysis::{
     print_stdout_block, print_summary_line,
 };
 use crate::cli::{
-    CapturedCommandOutput, SubcommandResolver, SynthesizableSubcommand, resolve_and_capture_output,
+    CapturedCommandOutput, EnvMap, SubcommandResolver, SynthesizableSubcommand,
+    resolve_and_capture_output,
 };
 
 /// Execute the `vp check` composite command (fmt + lint + optional type checks).
@@ -26,7 +26,7 @@ pub(crate) async fn execute_check(
     no_lint_flag: bool,
     no_error_on_unmatched_pattern: bool,
     paths: Vec<String>,
-    envs: &Arc<FxHashMap<Arc<OsStr>, Arc<OsStr>>>,
+    envs: &Arc<EnvMap>,
     cwd: &AbsolutePathBuf,
 ) -> Result<ExitStatus, Error> {
     let mut status = ExitStatus::SUCCESS;
@@ -38,6 +38,22 @@ pub(crate) async fn execute_check(
     let mut fmt_fix_started: Option<Instant> = None;
     let mut deferred_lint_pass: Option<(String, String)> = None;
     let resolved_vite_config = resolver.resolve_universal_vite_config().await?;
+
+    // Keep package runs on the root settings selected by `vp check`.
+    // Direct `vp lint` and `vp fmt` leave config discovery to the tools.
+    let explicit_config = paths
+        .iter()
+        .take_while(|arg| arg.as_str() != "--")
+        .any(|arg| arg.starts_with("-c") || arg == "--config" || arg.starts_with("--config="));
+    let root_config_file = resolved_vite_config
+        .config_file
+        .as_deref()
+        .filter(|_| !explicit_config && cwd.as_path() != resolver.workspace_path().as_path());
+    let config_args = |has_block: bool| match root_config_file.filter(|_| has_block) {
+        Some(path) => vec!["-c".to_string(), path.to_string()],
+        None => Vec::new(),
+    };
+    let fmt_config_args = config_args(resolved_vite_config.fmt.is_some());
 
     // A step is skipped when either the CLI flag is passed OR `check.fmt`/
     // `check.lint` is disabled in vite.config.ts. The skip note is printed only
@@ -67,7 +83,10 @@ pub(crate) async fn execute_check(
     }
 
     if !no_fmt {
-        let mut args = if fix { vec![] } else { vec!["--check".to_string()] };
+        let mut args = fmt_config_args.clone();
+        if !fix {
+            args.push("--check".to_string());
+        }
         if suppress_unmatched {
             args.push("--no-error-on-unmatched-pattern".to_string());
         }
@@ -147,7 +166,7 @@ pub(crate) async fn execute_check(
 
     if run_lint_phase {
         let lint_message_kind = LintMessageKind::from_flags(lint_enabled, type_check_enabled);
-        let mut args = Vec::new();
+        let mut args = config_args(resolved_vite_config.lint.is_some());
         // oxlint cannot auto-fix type diagnostics, so `--fix` is dropped on the
         // type-check-only path.
         if fix && lint_enabled {
@@ -248,7 +267,7 @@ pub(crate) async fn execute_check(
     // Re-run fmt after lint --fix, since lint fixes can break formatting
     // (e.g. the curly rule adding braces to if-statements).
     if fix && !no_fmt && lint_enabled {
-        let mut args = Vec::new();
+        let mut args = fmt_config_args;
         if suppress_unmatched {
             args.push("--no-error-on-unmatched-pattern".to_string());
         }
