@@ -1,4 +1,0 @@
-[[case]]
-name = "test_subcommand_routing"
-vp = "local"
-steps = [["node", "verify.mjs"]]

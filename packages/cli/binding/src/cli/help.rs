@@ -280,6 +280,13 @@ mod tests {
     }
 
     #[test]
+    fn test_with_doctor_or_complete_subcommand_does_not_prepend_run() {
+        for args in [vec!["doctor".to_string()], vec!["complete".to_string(), "zsh".to_string()]] {
+            assert!(!should_prepend_vitest_run(&args), "unexpected run prefix for {args:?}");
+        }
+    }
+
+    #[test]
     fn test_with_watch_flag_does_not_prepend_run() {
         assert!(!should_prepend_vitest_run(&["--watch".to_string()]));
         assert!(!should_prepend_vitest_run(&["-w".to_string()]));
