@@ -270,18 +270,13 @@ mod tests {
     }
 
     #[test]
-    fn test_with_run_subcommand_does_not_prepend_run() {
-        assert!(!should_prepend_vitest_run(&["run".to_string(), "--coverage".to_string()]));
-    }
-
-    #[test]
-    fn test_with_watch_subcommand_does_not_prepend_run() {
-        assert!(!should_prepend_vitest_run(&["watch".to_string()]));
-    }
-
-    #[test]
-    fn test_with_doctor_or_complete_subcommand_does_not_prepend_run() {
-        for args in [vec!["doctor".to_string()], vec!["complete".to_string(), "zsh".to_string()]] {
+    fn test_with_subcommand_does_not_prepend_run() {
+        for args in [
+            vec!["run".to_string(), "--coverage".to_string()],
+            vec!["watch".to_string()],
+            vec!["doctor".to_string()],
+            vec!["complete".to_string(), "zsh".to_string()],
+        ] {
             assert!(!should_prepend_vitest_run(&args), "unexpected run prefix for {args:?}");
         }
     }
