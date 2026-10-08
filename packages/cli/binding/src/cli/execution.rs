@@ -6,7 +6,10 @@ use vt_path::AbsolutePathBuf;
 
 use super::{
     resolver::SubcommandResolver,
-    types::{CapturedCommandOutput, EnvMap, SynthesizableSubcommand, exit_status_from},
+    types::{
+        CapturedCommandOutput, EnvMap, ResolvedSubcommand, SynthesizableSubcommand,
+        exit_status_from,
+    },
 };
 
 /// Resolve a subcommand into a prepared `tokio::process::Command`.
@@ -17,7 +20,14 @@ async fn resolve_and_build_command(
     cwd: &AbsolutePathBuf,
 ) -> Result<tokio::process::Command, Error> {
     let resolved = resolver.resolve(subcommand, envs, cwd).await.map_err(Error::Anyhow)?;
+    build_command(&resolved, cwd)
+}
 
+/// Prepare a `tokio::process::Command` for an already resolved subcommand.
+fn build_command(
+    resolved: &ResolvedSubcommand,
+    cwd: &AbsolutePathBuf,
+) -> Result<tokio::process::Command, Error> {
     // Resolve the program path using `which` to handle Windows .cmd/.bat files (PATHEXT)
     let program_path = vp_command::resolve_bin(
         resolved.program.as_ref().to_str().unwrap_or_default(),
