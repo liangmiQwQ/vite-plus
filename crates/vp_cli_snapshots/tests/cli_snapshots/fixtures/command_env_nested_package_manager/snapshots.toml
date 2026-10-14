@@ -1,0 +1,8 @@
+# https://github.com/voidzero-dev/vite-plus/issues/3013
+[[case]]
+name = "command_env_nested_package_manager"
+vp = "global"
+steps = [
+  { argv = ["node", "prepare-npm.cjs"], snapshot = false },
+  { argv = ["vp", "env", "current", "pm", "--json"], cwd = "svc", comment = "a nested project's own packageManager wins over the parent pnpm workspace" },
+]

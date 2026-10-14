@@ -948,15 +948,15 @@ async fn check_dev_engines(
     }
 }
 
-/// Read the workspace-root package.json (raw + typed) when it differs from the
-/// nearest one; `None` means "use the nearest package.json". See the call site
-/// for why package-manager checks need the workspace root.
-async fn read_workspace_root_doc(
+/// Read the package.json (raw + typed) that declares the package manager when it
+/// differs from the nearest one; `None` means "use the nearest package.json". See
+/// the call site for why package-manager checks need the declaring package.json.
+async fn read_package_manager_doc(
     cwd: &AbsolutePathBuf,
     nearest_pkg_path: &AbsolutePathBuf,
 ) -> Option<(serde_json::Value, vp_shared::PackageJson)> {
-    let (workspace_root, _) = vt_workspace::find_workspace_root(cwd).ok()?;
-    let root_pkg_path = workspace_root.path.join("package.json");
+    let project_root = vp_pm_cli::find_declaring_project_root(cwd).ok()??;
+    let root_pkg_path = project_root.join("package.json");
     if &root_pkg_path == nearest_pkg_path {
         return None;
     }
@@ -1015,13 +1015,13 @@ async fn collect_dev_engines_findings(
         return findings;
     };
 
-    // Package-manager checks examine the WORKSPACE ROOT package.json: that is the
-    // file vp install reads for packageManager / devEngines.packageManager. In a
-    // monorepo it can be a different (higher) file than the nearest package.json
-    // used by the Node.js runtime checks above.
+    // Package-manager checks examine the nearest package.json that DECLARES a
+    // package manager: that is the file vp install reads for packageManager /
+    // devEngines.packageManager. In a monorepo it can be a different (higher) file
+    // than the nearest package.json used by the Node.js runtime checks above.
     let nearest_pkg_path = pkg_dir.join("package.json");
     let root_doc = if check_package_managers {
-        read_workspace_root_doc(cwd, &nearest_pkg_path).await
+        read_package_manager_doc(cwd, &nearest_pkg_path).await
     } else {
         None
     };
@@ -1694,7 +1694,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dev_engines_findings_package_manager_checks_use_workspace_root() {
+    async fn test_dev_engines_findings_package_manager_checks_use_declaring_package_json() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = AbsolutePathBuf::new(temp_dir.path().to_path_buf()).unwrap();
 

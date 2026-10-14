@@ -6,7 +6,7 @@
 
 Use Vite+ to manage dependencies across pnpm, npm, Yarn, and Bun. Instead of switching between `pnpm install`, `npm install`, `yarn install`, and `bun install`, you can keep using `vp install`, `vp add`, `vp remove`, and the rest of the Vite+ package-management commands.
 
-Vite+ detects the package manager from the workspace root in this order:
+Vite+ detects the package manager from the current directory in this order:
 
 1. `packageManager` in `package.json`
 2. `devEngines.packageManager` in `package.json`
@@ -18,6 +18,8 @@ Vite+ detects the package manager from the workspace root in this order:
 8. `.pnpmfile.cjs` or `pnpmfile.cjs`
 9. `bunfig.toml`
 10. `yarn.config.cjs`
+
+Like Corepack, Vite+ reads the declarations (1 and 2) from the nearest `package.json` that has one. Vite+ skips any `package.json` without a declaration and keeps searching parent directories, so a nested project that declares its own package manager uses it, even inside another workspace. Packages installed in `node_modules` are always skipped. When no `package.json` declares a package manager, Vite+ checks the files (3 to 10) in each directory from the current one up to the workspace root, and the nearest directory that has one wins.
 
 If none of those files are present, `vp` falls back to `pnpm` by default. Vite+ automatically downloads the matching package manager and uses it for the command you ran, but package-manager detection never rewrites `package.json`. Use `vp env pin <package-manager>@<version>` when the project should declare an exact version explicitly.
 
