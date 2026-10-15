@@ -219,6 +219,7 @@ vp env print                  # Print PATH setup for both components
 
 # Manage
 vp env pin lts                # Pin Node.js only to an exact version
+vp env pin node@26            # Pin Node.js 26 to an exact version
 vp env pin lts pnpm@10        # Pin both project components to exact versions
 vp env pin pnpm@latest-10     # Pin pnpm to the version of its latest-10 dist-tag
 vp env install                # Install the complete resolved environment
