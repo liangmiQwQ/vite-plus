@@ -981,10 +981,10 @@ fn dist_tag_packages(package_manager_type: PackageManagerType) -> &'static [&'st
     }
 }
 
-fn dist_tag_cache_path(package_manager_type: PackageManagerType, url: &str) -> AbsolutePathBuf {
-    // The URL scopes the entry to its registry, and hashing it keeps tag
-    // characters such as `*` out of file names.
-    let key = hex::encode(Sha256::digest(url.as_bytes()));
+fn dist_tag_cache_path(package_manager_type: PackageManagerType, urls: &[Str]) -> AbsolutePathBuf {
+    // Every lookup URL scopes the entry, since a fallback package can use another
+    // registry. Hashing them keeps tag characters such as `*` out of file names.
+    let key = hex::encode(Sha256::digest(urls.join("\n").as_bytes()));
     vp_shared::EnvConfig::get()
         .dirs
         .cache
@@ -1053,8 +1053,7 @@ async fn resolve_dist_tag(
         return fetch_dist_tag_version(package_manager_type, tag, &urls, npm_config).await;
     }
 
-    // SAFETY: every package manager has at least one dist-tag package.
-    let cache_path = dist_tag_cache_path(package_manager_type, &urls[0]);
+    let cache_path = dist_tag_cache_path(package_manager_type, &urls);
     let cached = read_dist_tag_cache(&cache_path);
     if let Some((version, true)) = &cached {
         return Ok(version.clone());
@@ -2551,8 +2550,10 @@ mod tests {
                 );
                 first.assert_hits(1);
 
-                let cache_path =
-                    dist_tag_cache_path(PackageManagerType::Bun, &format!("{registry}/bun/latest"));
+                let cache_path = dist_tag_cache_path(
+                    PackageManagerType::Bun,
+                    &[vt_str::format!("{registry}/bun/latest")],
+                );
                 let expire_cache = || {
                     fs::File::options()
                         .write(true)
@@ -2618,7 +2619,7 @@ mod tests {
 
             let cache_path = dist_tag_cache_path(
                 PackageManagerType::Pnpm,
-                &format!("{}/pnpm/latest", server.base_url()),
+                &[vt_str::format!("{}/pnpm/latest", server.base_url())],
             );
             fs::File::options()
                 .write(true)
@@ -2761,6 +2762,52 @@ mod tests {
                 classic.assert_hits(1);
             },
         )
+        .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn yarn_dist_tag_cache_is_isolated_by_the_fallback_registry() {
+        use httpmock::prelude::*;
+
+        // Both workspaces share `@yarnpkg:registry`, so only the classic
+        // fallback registry tells their cache entries apart.
+        let scoped_registry = MockServer::start();
+        let first_registry = MockServer::start();
+        let second_registry = MockServer::start();
+        scoped_registry.mock(|when, then| {
+            when.method(GET).path("/@yarnpkg/cli-dist/berry");
+            then.status(404);
+        });
+        let first_request = first_registry.mock(|when, then| {
+            when.method(GET).path("/yarn/berry");
+            then.status(200).json_body(serde_json::json!({ "version": "2.4.2" }));
+        });
+        let second_request = second_registry.mock(|when, then| {
+            when.method(GET).path("/yarn/berry");
+            then.status(200).json_body(serde_json::json!({ "version": "2.4.3" }));
+        });
+        let config_for = |registry: &MockServer| NpmConfig {
+            values: HashMap::from([
+                ("@yarnpkg:registry".to_string(), scoped_registry.base_url()),
+                ("registry".to_string(), registry.base_url()),
+            ]),
+        };
+        let first_config = config_for(&first_registry);
+        let second_config = config_for(&second_registry);
+
+        let vp_home = create_temp_dir();
+        EnvConfig::with_vars_async([(env_vars::VP_HOME, vp_home.path().as_os_str())], |_| async {
+            assert_eq!(
+                resolve_dist_tag(PackageManagerType::Yarn, "berry", &first_config).await.unwrap(),
+                "2.4.2"
+            );
+            assert_eq!(
+                resolve_dist_tag(PackageManagerType::Yarn, "berry", &second_config).await.unwrap(),
+                "2.4.3"
+            );
+            first_request.assert_hits(1);
+            second_request.assert_hits(1);
+        })
         .await;
     }
 
