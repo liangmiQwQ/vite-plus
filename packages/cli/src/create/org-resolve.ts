@@ -207,8 +207,8 @@ export async function resolveOrgManifestForCreate(args: {
  *
  * By default, walks up from `startDir` via `findMonorepoRoot` (monorepo
  * markers only — `pnpm-workspace.yaml` or `workspaces` in `package.json`)
- * so monorepo invocations from any subdirectory still pick up the root
- * config. Pass `walkUp: false` to read `startDir` directly when the
+ * so monorepo invocations from any subdirectory still pick up
+ * the root config. Pass `walkUp: false` to read `startDir` directly when the
  * caller already holds the exact workspace root.
  *
  * Best-effort for resolution: a missing or unresolvable config reads as

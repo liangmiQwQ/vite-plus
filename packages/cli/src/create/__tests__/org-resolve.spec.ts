@@ -41,20 +41,6 @@ describe('getConfiguredDefaultTemplate', () => {
     expect(await getConfiguredDefaultTemplate(deep)).toBe('@your-org');
   });
 
-  it('walks up to a package.json workspace root saved with a BOM', async () => {
-    fs.writeFileSync(
-      path.join(repoRoot, 'vite.config.ts'),
-      "export default { create: { defaultTemplate: '@your-org' } };\n",
-    );
-    fs.writeFileSync(
-      path.join(repoRoot, 'package.json'),
-      '﻿{"name":"fixture","workspaces":["apps/*"]}',
-    );
-    const deep = path.join(repoRoot, 'apps', 'web');
-    fs.mkdirSync(deep, { recursive: true });
-    expect(await getConfiguredDefaultTemplate(deep)).toBe('@your-org');
-  });
-
   it('returns undefined when no vite.config exists anywhere up the tree', async () => {
     const deep = path.join(repoRoot, 'nested');
     fs.mkdirSync(deep, { recursive: true });

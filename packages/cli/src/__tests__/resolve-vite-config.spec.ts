@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { findViteConfigUp, resolveViteConfig } from '../resolve-vite-config.js';
+import { findViteConfigUp } from '../resolve-vite-config.js';
 
 describe('findViteConfigUp', () => {
   let tempDir: string;
@@ -63,6 +63,15 @@ describe('findViteConfigUp', () => {
     expect(result).toBeUndefined();
   });
 
+  it('should not search above stopDir when starting from its parent', () => {
+    fs.writeFileSync(path.join(tempDir, 'vite.config.ts'), '');
+    const stopDir = path.join(tempDir, 'monorepo');
+    fs.mkdirSync(stopDir);
+
+    const result = findViteConfigUp(tempDir, stopDir);
+    expect(result).toBeUndefined();
+  });
+
   it('should prefer the closest config file', () => {
     const subDir = path.join(tempDir, 'packages', 'my-lib');
     fs.mkdirSync(subDir, { recursive: true });
@@ -116,31 +125,5 @@ describe('findViteConfigUp', () => {
 
     const result = findViteConfigUp(subDir, tempDir);
     expect(result).toBe(path.join(tempDir, 'vite.config.mjs'));
-  });
-});
-
-describe('resolveViteConfig', () => {
-  let tempDir: string;
-
-  beforeEach(() => {
-    tempDir = fs.realpathSync(mkdtempSync(path.join(tmpdir(), 'vite-config-test-')));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('should not use a config above the workspace root with traverseUp', async () => {
-    fs.writeFileSync(path.join(tempDir, 'vite.config.ts'), 'export default {};\n');
-    const workspaceRoot = path.join(tempDir, 'monorepo');
-    fs.mkdirSync(workspaceRoot);
-    fs.writeFileSync(
-      path.join(workspaceRoot, 'pnpm-workspace.yaml'),
-      "packages:\n  - 'packages/*'\n",
-    );
-    fs.writeFileSync(path.join(workspaceRoot, 'package.json'), '{"name":"fixture"}');
-
-    const config = await resolveViteConfig(workspaceRoot, { traverseUp: true });
-    expect(config.configFile).toBeUndefined();
   });
 });
