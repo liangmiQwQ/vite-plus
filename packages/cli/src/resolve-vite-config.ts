@@ -12,6 +12,11 @@ import { VITE_CONFIG_FILES } from './utils/constants.ts';
 export function findViteConfigUp(startDir: string, stopDir: string): string | undefined {
   let dir = path.resolve(startDir);
   const stop = path.resolve(stopDir);
+  // Callers may start above `stopDir`, e.g. at the parent of a workspace root.
+  const relative = path.relative(stop, dir);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return undefined;
+  }
 
   while (true) {
     for (const filename of VITE_CONFIG_FILES) {
@@ -21,7 +26,7 @@ export function findViteConfigUp(startDir: string, stopDir: string): string | un
       }
     }
     const parent = path.dirname(dir);
-    if (parent === dir || !parent.startsWith(stop)) {
+    if (dir === stop || parent === dir) {
       break;
     }
     dir = parent;
