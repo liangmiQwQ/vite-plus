@@ -185,8 +185,8 @@ describe('discoverWorkspacePackages', () => {
     const names = packages.map((p) => p.name).toSorted();
     expect(names).toEqual(['bar', 'foo']);
     const foo = packages.find((p) => p.name === 'foo')!;
-    // pkg.path uses forward slashes on every platform (normalized from glob's
-    // native separators), so it compares cleanly against workspace patterns.
+    // pkg.path uses forward slashes on every platform, so it compares cleanly
+    // against workspace patterns.
     expect(foo.path).toBe('packages/foo');
     expect(foo.description).toBe('a foo');
     expect(foo.version).toBe('1.0.0');
@@ -198,6 +198,13 @@ describe('discoverWorkspacePackages', () => {
       name: 'dep',
     });
     const packages = discoverWorkspacePackages(['packages/*'], tmpDir);
+    expect(packages.map((p) => p.name)).toEqual(['a']);
+  });
+
+  it('skips packages excluded by negated patterns', () => {
+    writeJson(path.join(tmpDir, 'packages/a/package.json'), { name: 'a' });
+    writeJson(path.join(tmpDir, 'packages/excluded/package.json'), { name: 'excluded' });
+    const packages = discoverWorkspacePackages(['packages/*', '!packages/excluded'], tmpDir);
     expect(packages.map((p) => p.name)).toEqual(['a']);
   });
 });

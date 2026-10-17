@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { globSync } from 'glob';
 import { minimatch } from 'minimatch';
+import { globSync } from 'tinyglobby';
 import { Scalar, YAMLSeq } from 'yaml';
 
 import { detectWorkspace as detectWorkspaceBinding } from '../../binding/index.js';
@@ -30,10 +30,11 @@ export function findPackageJsonFilesFromPatterns(patterns: string[], cwd: string
   if (patterns.length === 0) {
     return [];
   }
+  // tinyglobby always returns `/` separators; normalize them to native paths for Windows callers.
   return globSync(
     patterns.map((pattern) => `${pattern}/package.json`),
     { absolute: true, cwd },
-  );
+  ).map((file) => path.normalize(file));
 }
 
 // Detect if we're in a monorepo and get workspace info
@@ -148,10 +149,9 @@ export function discoverWorkspacePackages(
     }
     packages.push({
       name: pkg.name,
-      // glob returns native separators; normalize to forward slashes so the
-      // path compares cleanly against workspace-pattern-derived values like
-      // `parentDirs` on Windows (path.join accepts either separator).
-      path: path.dirname(packageJsonRelativePath).split(path.sep).join('/'),
+      // Keep tinyglobby's forward slashes so the path compares cleanly against
+      // workspace-pattern-derived values like `parentDirs` on Windows.
+      path: path.posix.dirname(packageJsonRelativePath),
       description: pkg.description,
       version: pkg.version,
     });
