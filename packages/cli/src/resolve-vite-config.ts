@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { findMonorepoRoot } from '../binding/index.js';
 import { withConfigMetadataResolution } from './define-config.ts';
 import { VITE_CONFIG_FILES } from './utils/constants.ts';
 
@@ -42,39 +43,6 @@ export function hasViteConfig(dir: string): boolean {
   return findViteConfig(dir) !== undefined;
 }
 
-/**
- * Find the workspace root by walking up from `startDir` looking for
- * monorepo indicators (pnpm-workspace.yaml, workspaces in package.json, lerna.json).
- */
-export function findWorkspaceRoot(startDir: string): string | undefined {
-  let dir = path.resolve(startDir);
-  while (true) {
-    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) {
-      return dir;
-    }
-    const pkgPath = path.join(dir, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        if (pkg.workspaces) {
-          return dir;
-        }
-      } catch {
-        // Skip malformed package.json and continue searching parent directories
-      }
-    }
-    if (fs.existsSync(path.join(dir, 'lerna.json'))) {
-      return dir;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      break;
-    }
-    dir = parent;
-  }
-  return undefined;
-}
-
 export interface ResolveViteConfigOptions {
   traverseUp?: boolean;
 }
@@ -89,7 +57,7 @@ export async function resolveViteConfig(cwd: string, options?: ResolveViteConfig
   // staged/create…), so skip the user's plugin factory while it evaluates.
   return withConfigMetadataResolution(async () => {
     if (options?.traverseUp && !hasViteConfig(cwd)) {
-      const workspaceRoot = findWorkspaceRoot(cwd);
+      const workspaceRoot = findMonorepoRoot(cwd);
       if (workspaceRoot) {
         const configFile = findViteConfigUp(path.dirname(cwd), workspaceRoot);
         if (configFile) {
