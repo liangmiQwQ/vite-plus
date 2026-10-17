@@ -30,11 +30,10 @@ export function findPackageJsonFilesFromPatterns(patterns: string[], cwd: string
   if (patterns.length === 0) {
     return [];
   }
-  // tinyglobby always returns `/` separators; normalize them to native paths for Windows callers.
   return globSync(
     patterns.map((pattern) => `${pattern}/package.json`),
     { absolute: true, cwd },
-  ).map((file) => path.normalize(file));
+  );
 }
 
 // Detect if we're in a monorepo and get workspace info

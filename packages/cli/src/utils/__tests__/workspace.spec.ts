@@ -229,14 +229,14 @@ describe('updatePackageJsonWithDeps', () => {
 });
 
 describe('findPackageJsonFilesFromPatterns', () => {
-  it('returns absolute paths for matching package.json files', () => {
+  it('returns absolute paths with forward slashes for matching package.json files', () => {
     writeJson(path.join(tmpDir, 'packages/a/package.json'), { name: 'a' });
     writeJson(path.join(tmpDir, 'packages/b/package.json'), { name: 'b' });
     const result = findPackageJsonFilesFromPatterns(['packages/*'], tmpDir).toSorted();
     expect(result).toEqual(
       [
-        path.join(tmpDir, 'packages/a/package.json'),
-        path.join(tmpDir, 'packages/b/package.json'),
+        `${tmpDir.replaceAll('\\', '/')}/packages/a/package.json`,
+        `${tmpDir.replaceAll('\\', '/')}/packages/b/package.json`,
       ].toSorted(),
     );
   });
