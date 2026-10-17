@@ -200,7 +200,7 @@ pub async fn execute(cwd: AbsolutePathBuf) -> Result<ExitStatus, Error> {
     let package_manager_info = find_workspace_root(&cwd)
         .ok()
         .and_then(|(root, _)| {
-            get_package_manager_type_and_version(&cwd, &root, None)
+            get_package_manager_type_and_version(&root, None)
                 .ok()
                 // a devEngines range (e.g. "^11.0.0") has no meaningful "v" prefix
                 .map(|(pm, v, _, _)| {

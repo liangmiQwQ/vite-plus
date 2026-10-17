@@ -11,7 +11,7 @@ use std::{io::Write, process::ExitStatus};
 
 use vp_js_runtime::{NodeProvider, VersionSource, resolve_node_version};
 use vp_pm_cli::{
-    PackageManagerType, download_package_manager_for_cwd, find_declaring_project_root,
+    PackageManagerType, download_package_manager_for_cwd,
     resolve_package_manager_from_package_json, resolve_package_manager_version_for_cwd,
 };
 use vp_shared::output;
@@ -59,7 +59,7 @@ pub async fn execute(
 
     let specs = EnvSpecs::parse(&specs)?;
     let package_manager_root = if specs.package_manager.is_some() {
-        package_manager_root(&cwd)?.ok_or_else(|| {
+        workspace_root(&cwd)?.ok_or_else(|| {
             Error::Other("cannot pin a package manager without package.json".into())
         })?
     } else {
@@ -993,7 +993,7 @@ async fn unpin_package_manager(
     if matches!(target, Some(PinTarget::NodeVersion | PinTarget::Nvmrc)) {
         return Ok(());
     }
-    let root = package_manager_root(cwd)?.unwrap_or_else(|| cwd.clone());
+    let root = workspace_root(cwd)?.unwrap_or_else(|| cwd.clone());
     let package_json_path = root.join(PACKAGE_JSON_FILE);
     let Ok(content) = tokio::fs::read_to_string(&package_json_path).await else {
         vp_shared::output::print_stdout_line(format_args!(
@@ -1049,11 +1049,7 @@ async fn unpin_package_manager(
     Ok(())
 }
 
-/// The project whose package.json declares the effective package manager, else the workspace root.
-fn package_manager_root(cwd: &AbsolutePathBuf) -> Result<Option<AbsolutePathBuf>, Error> {
-    if let Some(project_root) = find_declaring_project_root(cwd)? {
-        return Ok(Some(project_root));
-    }
+fn workspace_root(cwd: &AbsolutePathBuf) -> Result<Option<AbsolutePathBuf>, Error> {
     match vt_workspace::find_workspace_root(cwd) {
         Ok((workspace, _)) => Ok(Some(workspace.path.to_absolute_path_buf())),
         Err(vt_workspace::Error::PackageJsonNotFound(_)) => Ok(None),
