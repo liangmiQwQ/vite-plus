@@ -36,7 +36,8 @@ Node.js Resolution
     Directory         <workspace>
     Source            VP_NODE_VERSION
     Version           20.18.0
-  ✓ Node binary       installed
+  ⚠ Node binary       not installed
+  note: Version will be downloaded on first use.
 
 ⚠ Some warnings found.
 ```
