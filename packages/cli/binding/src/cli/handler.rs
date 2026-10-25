@@ -167,13 +167,6 @@ impl UserConfigLoader for VitePlusConfigLoader {
         // Try static config extraction first (no JS runtime needed)
         let static_fields = vp_static_config::resolve_static_config(package_path);
         match static_fields.get("run") {
-            // Plugin config hooks may add or override `run`, so only Vite can resolve it.
-            _ if static_fields.get("plugins").is_some() => {
-                tracing::debug!(
-                    "plugins detected for {}, falling back to NAPI to run config hooks",
-                    package_path.as_path().display()
-                );
-            }
             Some(vp_static_config::FieldValue::Json(run_value)) => {
                 tracing::debug!(
                     "Using statically extracted run config for {}",
