@@ -166,33 +166,32 @@ impl UserConfigLoader for VitePlusConfigLoader {
     ) -> anyhow::Result<Option<UserRunConfig>> {
         // Try static config extraction first (no JS runtime needed)
         let static_fields = vp_static_config::resolve_static_config(package_path);
-        // Plugin config hooks may add or modify `run`, even when it is statically analyzable.
-        if static_fields.get("plugins").is_some() {
-            tracing::debug!(
-                "plugins detected for {}, falling back to NAPI to run config hooks",
-                package_path.as_path().display()
-            );
-        } else {
-            match static_fields.get("run") {
-                Some(vp_static_config::FieldValue::Json(run_value)) => {
-                    tracing::debug!(
-                        "Using statically extracted run config for {}",
-                        package_path.as_path().display()
-                    );
-                    let run_config: UserRunConfig = serde_json::from_value(run_value)?;
-                    return Ok(Some(run_config));
-                }
-                Some(vp_static_config::FieldValue::NonStatic) => {
-                    // `run` field exists (or may exist via a spread) — fall back to NAPI
-                    tracing::debug!(
-                        "run config is not statically analyzable for {}, falling back to NAPI",
-                        package_path.as_path().display()
-                    );
-                }
-                None => {
-                    // Config was analyzed successfully and `run` field is definitively absent
-                    return Ok(None);
-                }
+        match static_fields.get("run") {
+            // Plugin config hooks may add or override `run`, so only Vite can resolve it.
+            _ if static_fields.get("plugins").is_some() => {
+                tracing::debug!(
+                    "plugins detected for {}, falling back to NAPI to run config hooks",
+                    package_path.as_path().display()
+                );
+            }
+            Some(vp_static_config::FieldValue::Json(run_value)) => {
+                tracing::debug!(
+                    "Using statically extracted run config for {}",
+                    package_path.as_path().display()
+                );
+                let run_config: UserRunConfig = serde_json::from_value(run_value)?;
+                return Ok(Some(run_config));
+            }
+            Some(vp_static_config::FieldValue::NonStatic) => {
+                // `run` field exists (or may exist via a spread) — fall back to NAPI
+                tracing::debug!(
+                    "run config is not statically analyzable for {}, falling back to NAPI",
+                    package_path.as_path().display()
+                );
+            }
+            None => {
+                // Config was analyzed successfully and `run` field is definitively absent
+                return Ok(None);
             }
         }
 
