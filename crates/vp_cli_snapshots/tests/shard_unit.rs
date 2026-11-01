@@ -6,7 +6,7 @@ mod shard;
 #[test]
 fn shards_cover_every_trial_once_with_balanced_counts() {
     for test_count in [0, 1, 2, 8, 100] {
-        for total in [1, 2, 3, 5] {
+        for total in [1, 2, 3, 4, 5] {
             let tests: Vec<_> = (0..test_count).collect();
             let shards: Vec<_> = (1..=total)
                 .map(|index| shard::select(tests.clone(), &format!("{index}/{total}")).unwrap())
