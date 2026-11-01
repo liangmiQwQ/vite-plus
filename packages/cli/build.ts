@@ -1387,7 +1387,8 @@ async function createConditionalShim(
  * Update CLI package.json with the generated exports
  */
 async function updateCliPackageJson(pkgPath: string, generatedExports: Record<string, unknown>) {
-  const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'));
+  const previous = await readFile(pkgPath, 'utf-8');
+  const pkg = JSON.parse(previous);
 
   // Remove old ./test/* exports (if any) to ensure clean sync
   if (pkg.exports) {
@@ -1414,5 +1415,9 @@ async function updateCliPackageJson(pkgPath: string, generatedExports: Record<st
     process.exit(1);
   }
 
-  await writeFile(pkgPath, code);
+  // The global CLI embeds this file with include_str!: touching unchanged
+  // exports makes Cargo rebuild it after every TypeScript build.
+  if (code !== previous) {
+    await writeFile(pkgPath, code);
+  }
 }

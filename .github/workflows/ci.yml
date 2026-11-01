@@ -17,6 +17,7 @@ on:
     paths:
       - '**'
       - '!**/*.md'
+      - '!docs/**'
       - 'crates/vp_cli_snapshots/**'
 
 concurrency:
@@ -108,19 +109,6 @@ jobs:
       - name: Run vp fmt --check
         run: pnpm vp fmt --check
 
-  download-previous-rolldown-binaries:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.code-changed == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
-      - uses: ./.github/actions/download-rolldown-binaries
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
   test:
     needs: detect-changes
     if: needs.detect-changes.outputs.code-changed == 'true'
@@ -360,7 +348,7 @@ jobs:
           save-cache: ${{ github.ref_name == 'main' }}
           cache-key: lint
           tools: just,cargo-shear
-          components: clippy rust-docs rustfmt
+          components: clippy rustfmt
 
       - name: Rust lint
         id: rust-lint
@@ -384,6 +372,9 @@ jobs:
       # via dts-resolver) as dedup-able depending on async resolution order.
       - name: Deduplicate dependencies
         run: pnpm dedupe --check || pnpm dedupe --check
+
+      - name: Test runtime prewarming
+        run: node --test .github/scripts/__tests__/prewarm-node.mjs
 
       - wait: rust-lint
 
@@ -410,12 +401,9 @@ jobs:
           profile: ci
           save-cache: ${{ github.ref_name == 'main' }}
 
+  # Windows and Unix consume different artifacts; neither waits for the other.
   cli-e2e-test:
-    name: CLI E2E test
-    needs:
-      - download-previous-rolldown-binaries
-      - build-windows-cli
-      - build-cli-test-binaries
+    needs: build-cli-test-binaries
     strategy:
       fail-fast: false
       matrix:
@@ -426,548 +414,26 @@ jobs:
           - os: namespace-profile-mac-default
             target: aarch64-apple-darwin
             test-node: 24.11.0
-          - os: namespace-profile-windows-4c-8g
-            target: x86_64-pc-windows-msvc
-            test-node: 26.0.0
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    steps:
-      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
-      - uses: ./.github/actions/clone
-
-      - uses: ./.github/actions/setup-ci-node
-
-      - name: Install docs dependencies
-        run: pnpm -C docs install --frozen-lockfile
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: rolldown-binaries
-          path: ./rolldown/packages/rolldown/src
-          merge-multiple: true
-
-      # Prebuilt by build-windows-cli (Linux + cargo-xwin); the artifact
-      # paths are workspace-relative, so this places the binding into
-      # packages/cli/binding/ and the CLI binaries into
-      # target/x86_64-pc-windows-msvc/release/ where
-      # `tool install-global-cli` finds them.
-      - name: Download prebuilt Windows binaries
-        if: runner.os == 'Windows'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: windows-cli-binaries
-
-      - uses: ./.github/actions/download-cli-test-binaries
-        if: runner.os != 'Windows'
-        with:
-          target: ${{ matrix.target }}
-
-      - name: Build with upstream
-        uses: ./.github/actions/build-upstream
-        with:
-          target: ${{ matrix.target }}
-          skip-native: true
-
-      - name: Ensure no unexpected file changes after build
-        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
-        run: |
-          if [[ -n "$(git status --porcelain)" ]]; then
-            echo "::error::Unexpected file changes detected after build"
-            git status
-            git diff
-            exit 1
-          fi
-
-      - name: Check TypeScript types
-        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
-        run: pnpm tsgo
-
-      - name: Install Global CLI vp
-        run: |
-          pnpm bootstrap-cli:ci
-          if [[ "$RUNNER_OS" != "Windows" ]]; then
-            . "$HOME/.vite-plus/env"
-            # GITHUB_PATH prepends entries, but fallback shims must remain last.
-            echo "PATH=$PATH" >> "$GITHUB_ENV"
-          fi
-
-      - name: Load Windows CLI environment
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          . (Join-Path $HOME '.vite-plus/env.ps1')
-          "PATH=$env:Path" >> $env:GITHUB_ENV
-
-      - name: Verify vp installation
-        run: |
-          which vp
-          vp --version
-          vp -h
-
-      - name: Run vp check
-        run: vp check
-
-      - name: Run unit tests
-        run: vp env exec --node ${{ matrix.test-node }} node packages/cli/dist/bin.js test run
-        env:
-          RUST_BACKTRACE: '1'
-          RUST_MIN_STACK: 8388608
-
-      - name: Test global package install (powershell)
-        if: ${{ runner.os != 'Linux' }}
-        shell: pwsh
-        run: |
-          $vpHome = Join-Path $HOME ".vite-plus"
-          $vpBin = Join-Path $vpHome "bin"
-          . (Join-Path $vpHome 'env.ps1')
-
-          Write-Host "PATH: $env:Path"
-          Get-Command node
-          Get-Command npm
-          Get-Command npx
-          Get-Command vp
-          vp env doctor
-
-          # Test 1: Install a JS-based CLI (typescript)
-          vp install -g typescript
-          tsc --version
-          Get-Command tsc
-
-          # Test 2: Verify the package was installed correctly
-          Get-ChildItem $vpBin
-
-          # Test 3: Uninstall
-          vp uninstall -g typescript
-
-          # Test 4: Verify uninstall removed shim
-          Write-Host "Checking bin dir after uninstall:"
-          Get-ChildItem $vpBin
-          $shimPath = if ($IsWindows) { Join-Path $vpBin "tsc.cmd" } else { Join-Path $vpBin "tsc" }
-          if (Test-Path $shimPath) {
-            Write-Error "tsc shim file still exists at $shimPath"
-            exit 1
-          }
-          Write-Host "tsc shim removed successfully"
-
-          # Test 5: use session
-          vp env use 18
-          node --version
-          vp env doctor
-          vp env use --unset
-          node --version
-
-      - name: Test global package install (cmd)
-        if: ${{ runner.os == 'Windows' }}
-        shell: cmd
-        run: |
-          echo "PATH: %PATH%"
-          where.exe node
-          where.exe npm
-          where.exe npx
-          where.exe vp
-
-          vp env use 18
-          node --version
-          vp env use --unset
-          node --version
-
-          vp env doctor
-
-          REM Test 1: Install a JS-based CLI (typescript)
-          vp install -g typescript
-          tsc --version
-          where.exe tsc
-
-          REM Test 2: Verify the package was installed correctly
-          dir "%USERPROFILE%\.vite-plus\packages\typescript\"
-          dir "%USERPROFILE%\.vite-plus\bin\"
-
-          REM Test 3: Uninstall
-          vp uninstall -g typescript
-
-          REM Test 4: Verify uninstall removed shim (.cmd wrapper)
-          echo Checking bin dir after uninstall:
-          dir "%USERPROFILE%\.vite-plus\bin\"
-          if exist "%USERPROFILE%\.vite-plus\bin\tsc.cmd" (
-            echo Error: tsc.cmd shim file still exists
-            exit /b 1
-          )
-          echo tsc.cmd shim removed successfully
-
-          REM Test 5: Verify shell script was also removed (for Git Bash)
-          if exist "%USERPROFILE%\.vite-plus\bin\tsc" (
-            echo Error: tsc shell script still exists
-            exit /b 1
-          )
-          echo tsc shell script removed successfully
-
-          REM Test 6: use session
-          vp env use 18
-          node --version
-          vp env doctor
-          vp env use --unset
-          node --version
-
-      - name: Test global package install (bash)
-        run: |
-          echo "PATH: $PATH"
-          ls -la ~/.vite-plus/
-          ls -la ~/.vite-plus/bin/
-          which node
-          which npm
-          which npx
-          which vp
-          vp env doctor
-
-          # Test 1: Install a JS-based CLI (typescript)
-          vp install -g typescript
-          tsc --version
-          which tsc
-
-          # Test 2: Verify the package was installed correctly
-          ls -la ~/.vite-plus/bin/
-
-          # Test 3: Uninstall
-          vp uninstall -g typescript
-
-          # Test 4: Verify uninstall removed shim
-          echo "Checking bin dir after uninstall:"
-          ls -la ~/.vite-plus/bin/
-          if [ -f ~/.vite-plus/bin/tsc ]; then
-            echo "Error: tsc shim file still exists at ~/.vite-plus/bin/tsc"
-            exit 1
-          fi
-          echo "tsc shim removed successfully"
-
-          # Test 5: use session
-          vp env use 18
-          node --version
-          vp env doctor
-          vp env use --unset
-          node --version
-
-      # Upgrade tests (merged from separate job to avoid duplicate build)
-      - name: Test upgrade (bash)
-        shell: bash
-        run: |
-          # Resolve `current` (symlink on Unix, junction on Windows) and return
-          # the install dir basename — "local-dev-<timestamp>" for the dev
-          # build, "<version>" for a downloaded release. Node's realpathSync
-          # handles symlinks and junctions uniformly.
-          get_current_dirname() {
-            node -p "require('path').basename(require('fs').realpathSync(require('path').resolve(process.env.USERPROFILE || process.env.HOME, '.vite-plus', 'current')))"
-          }
-
-          # Assert on the `current` target dir, not the version: right after a
-          # release commit on main, the dev build's version equals npm latest,
-          # so `vp upgrade --force` succeeds but the version is unchanged.
-          # The dir flip (dev → release → dev) is the real signal that the
-          # download/extract/swap and rollback flows ran end-to-end.
-          INITIAL_DIR=$(get_current_dirname)
-          echo "Initial install dir: $INITIAL_DIR"
-
-          # --check queries npm registry and prints update status
-          vp upgrade --check
-
-          # full upgrade: download, extract, swap
-          vp upgrade --force
-          vp --version
-          vp env doctor
-
-          ls -la ~/.vite-plus/
-
-          UPDATED_DIR=$(get_current_dirname)
-          echo "Updated install dir: $UPDATED_DIR"
-          if [ "$UPDATED_DIR" == "$INITIAL_DIR" ]; then
-            echo "Error: current install dir should have changed after upgrade (still $INITIAL_DIR)"
-            exit 1
-          fi
-
-          # rollback to the previous install
-          vp upgrade --rollback
-          vp --version
-          vp env doctor
-
-          ROLLBACK_DIR=$(get_current_dirname)
-          echo "Rollback install dir: $ROLLBACK_DIR"
-          if [ "$ROLLBACK_DIR" != "$INITIAL_DIR" ]; then
-            echo "Error: current install dir should have been restored after rollback (expected $INITIAL_DIR, got $ROLLBACK_DIR)"
-            exit 1
-          fi
-
-      - name: Test upgrade (powershell)
-        if: ${{ runner.os != 'Linux' }}
-        shell: pwsh
-        run: |
-          $vpHome = Join-Path $HOME ".vite-plus"
-          . (Join-Path $vpHome 'env.ps1')
-          Get-ChildItem $vpHome
-
-          # See bash block above for why we assert on the install dir basename.
-          function Get-CurrentDirname {
-            node -p "require('path').basename(require('fs').realpathSync(require('path').resolve(process.env.USERPROFILE || process.env.HOME, '.vite-plus', 'current')))"
-          }
-
-          $initialDir = Get-CurrentDirname
-          Write-Host "Initial install dir: $initialDir"
-
-          # --check queries npm registry and prints update status
-          vp upgrade --check
-
-          # full upgrade: download, extract, swap
-          vp upgrade --force
-          vp --version
-          vp env doctor
-
-          Get-ChildItem $vpHome
-
-          $updatedDir = Get-CurrentDirname
-          Write-Host "Updated install dir: $updatedDir"
-          if ($updatedDir -eq $initialDir) {
-            Write-Error "Error: current install dir should have changed after upgrade (still $initialDir)"
-            exit 1
-          }
-
-          # rollback to the previous install
-          vp upgrade --rollback
-          vp --version
-          vp env doctor
-
-          $rollbackDir = Get-CurrentDirname
-          Write-Host "Rollback install dir: $rollbackDir"
-          if ($rollbackDir -ne $initialDir) {
-            Write-Error "Error: current install dir should have been restored after rollback (expected $initialDir, got $rollbackDir)"
-            exit 1
-          }
-
-      - name: Test upgrade (cmd)
-        if: ${{ runner.os == 'Windows' }}
-        shell: cmd
-        run: |
-          REM See bash block above for why we assert on the install dir basename.
-          for /f "usebackq delims=" %%v in (`node -p "require('path').basename(require('fs').realpathSync(require('path').resolve(process.env.USERPROFILE, '.vite-plus', 'current')))"`) do set INITIAL_DIR=%%v
-          echo Initial install dir: %INITIAL_DIR%
-
-          REM --check queries npm registry and prints update status
-          vp upgrade --check
-
-          REM full upgrade: download, extract, swap
-          vp upgrade --force
-          vp --version
-          vp env doctor
-
-          dir "%USERPROFILE%\.vite-plus\"
-
-          for /f "usebackq delims=" %%v in (`node -p "require('path').basename(require('fs').realpathSync(require('path').resolve(process.env.USERPROFILE, '.vite-plus', 'current')))"`) do set UPDATED_DIR=%%v
-          echo Updated install dir: %UPDATED_DIR%
-          if "%UPDATED_DIR%"=="%INITIAL_DIR%" (
-            echo Error: current install dir should have changed after upgrade, still %INITIAL_DIR%
-            exit /b 1
-          )
-
-          REM rollback to the previous install
-          vp upgrade --rollback
-          vp --version
-          vp env doctor
-
-          for /f "usebackq delims=" %%v in (`node -p "require('path').basename(require('fs').realpathSync(require('path').resolve(process.env.USERPROFILE, '.vite-plus', 'current')))"`) do set ROLLBACK_DIR=%%v
-          echo Rollback install dir: %ROLLBACK_DIR%
-          if not "%ROLLBACK_DIR%"=="%INITIAL_DIR%" (
-            echo Error: current install dir should have been restored after rollback, expected %INITIAL_DIR%, got %ROLLBACK_DIR%
-            exit /b 1
-          )
-
-      - name: Test same-version forced upgrade (Windows)
-        if: ${{ runner.os == 'Windows' }}
-        shell: pwsh
-        run: |
-          # Force-reinstall the published `latest` version rather than the local
-          # build's version: mid-release-cycle the build can be ahead of the
-          # registry, and `vp upgrade <version>` must download <version> from npm.
-          $version = "$(npm view vite-plus version)".Trim()
-          if (-not $version) {
-            Write-Error "Failed to resolve latest published vite-plus version"
-            exit 1
-          }
-
-          $realVpHome = Join-Path $HOME ".vite-plus"
-          $currentVp = Join-Path $realVpHome "current/bin/vp.exe"
-
-          $tempVpHome = Join-Path $env:RUNNER_TEMP "vp-same-version-force"
-          if (Test-Path $tempVpHome) {
-            Remove-Item $tempVpHome -Recurse -Force
-          }
-
-          $initialVersionDir = Join-Path $tempVpHome $version
-          $initialBinDir = Join-Path $initialVersionDir "bin"
-          New-Item -ItemType Directory -Path $initialBinDir | Out-Null
-          Copy-Item $currentVp (Join-Path $initialBinDir "vp.exe")
-          # Preserve installed state so the first invocation executes upgrade.
-          Copy-Item (Join-Path (Split-Path $currentVp) ".vp-setup-complete") $initialBinDir
-          New-Item -ItemType Junction -Path (Join-Path $tempVpHome "current") -Target $initialVersionDir | Out-Null
-
-          $env:VP_HOME = $tempVpHome
-          & (Join-Path $tempVpHome "current/bin/vp.exe") upgrade $version --force
-
-          $currentTarget = (Get-Item (Join-Path $tempVpHome "current")).Target
-          if ($currentTarget -is [array]) {
-            $currentTarget = $currentTarget[0]
-          }
-          $updatedDir = Split-Path -Leaf $currentTarget
-          Write-Host "Updated install dir: $updatedDir"
-          if (-not $updatedDir.StartsWith("$version+force.")) {
-            Write-Error "Expected current to point at a forced reinstall dir for $version, got $updatedDir"
-            exit 1
-          }
-
-          if (-not (Test-Path (Join-Path $tempVpHome "$version/bin/vp.exe"))) {
-            Write-Error "Original same-version install directory was unexpectedly removed"
-            exit 1
-          }
-
-          $previousVersion = Get-Content (Join-Path $tempVpHome ".previous-version") -Raw
-          if ($previousVersion.Trim() -ne $version) {
-            Write-Error "Expected .previous-version to be $version, got $previousVersion"
-            exit 1
-          }
-
-      - name: Test same-version forced upgrade (Unix)
-        if: ${{ runner.os != 'Windows' }}
-        shell: bash
-        run: |
-          # Unix mirror of the Windows same-version forced-upgrade test above.
-          # Overwriting the running binary in place does not fail on macOS or
-          # modern Linux the way it does on Windows, but the fix still changes
-          # the on-disk layout on every platform (current must repoint at a
-          # `<version>+force.*` dir, the original version tree must survive, and
-          # `.previous-version` must be recorded), so we assert that here too.
-          #
-          # Force-reinstall the published `latest` version rather than the local
-          # build's version: mid-release-cycle the build can be ahead of the
-          # registry, and `vp upgrade <version>` must download <version> from npm.
-          version=$(npm view vite-plus version)
-          if [ -z "$version" ]; then
-            echo "Failed to resolve latest published vite-plus version"
-            exit 1
-          fi
-
-          real_vp_home="$HOME/.vite-plus"
-          current_vp="$real_vp_home/current/bin/vp"
-          temp_vp_home="${RUNNER_TEMP:?RUNNER_TEMP must be set}/vp-same-version-force"
-          rm -rf "$temp_vp_home"
-
-          initial_bin_dir="$temp_vp_home/$version/bin"
-          mkdir -p "$initial_bin_dir"
-          cp "$current_vp" "$initial_bin_dir/vp"
-          # Preserve installed state so the first invocation executes upgrade.
-          cp "$(dirname "$current_vp")/.vp-setup-complete" "$initial_bin_dir/"
-          chmod +x "$initial_bin_dir/vp"
-          # Relative symlink, matching swap_current_link's `current -> <version>`.
-          ln -s "$version" "$temp_vp_home/current"
-
-          VP_HOME="$temp_vp_home" "$temp_vp_home/current/bin/vp" upgrade "$version" --force
-
-          updated_dir=$(basename "$(readlink "$temp_vp_home/current")")
-          echo "Updated install dir: $updated_dir"
-          case "$updated_dir" in
-            "$version+force."*) ;;
-            *)
-              echo "Expected current to point at a forced reinstall dir for $version, got $updated_dir"
-              exit 1
-              ;;
-          esac
-
-          if [ ! -f "$temp_vp_home/$version/bin/vp" ]; then
-            echo "Original same-version install directory was unexpectedly removed"
-            exit 1
-          fi
-
-          previous_version=$(tr -d '[:space:]' < "$temp_vp_home/.previous-version")
-          if [ "$previous_version" != "$version" ]; then
-            echo "Expected .previous-version to be $version, got $previous_version"
-            exit 1
-          fi
-
-      - name: Test implode (bash)
-        shell: bash
-        run: |
-          # Retry on Windows — file locks can cause transient "Access is denied" errors
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            for i in 1 2 3; do
-              vp implode --yes && break
-              echo "Retry $i: vp implode failed, waiting 5s..."
-              sleep 5
-            done
-          else
-            vp implode --yes
-          fi
-          ls -la ~/
-          VP_HOME="${USERPROFILE:-$HOME}/.vite-plus"
-          if [ -d "$VP_HOME" ]; then
-            echo "Error: $VP_HOME still exists after implode"
-            exit 1
-          fi
-          # Reinstall
-          pnpm bootstrap-cli:ci
-          vp --version
-
-      - name: Test implode (powershell)
-        if: ${{ runner.os != 'Linux' }}
-        shell: pwsh
-        run: |
-          $vpHome = Join-Path $HOME ".vite-plus"
-          . (Join-Path $vpHome 'env.ps1')
-
-          if ($IsWindows) {
-            # Retry — Windows file locks can cause transient "Access is denied" errors
-            foreach ($i in 1..3) {
-              vp implode --yes
-              if ($LASTEXITCODE -eq 0) { break }
-              Write-Host "Retry $i`: vp implode failed, waiting 5s..."
-              Start-Sleep -Seconds 5
-            }
-            Start-Sleep -Seconds 5
-          } else {
-            vp implode --yes
-          }
-
-          Get-ChildItem $HOME
-          if (Test-Path $vpHome) {
-            Write-Error "$vpHome still exists after implode"
-            exit 1
-          }
-          pnpm bootstrap-cli:ci
-          vp --version
-
-      - name: Test implode (cmd)
-        if: ${{ runner.os == 'Windows' }}
-        shell: cmd
-        run: |
-          REM Retry — Windows file locks can cause transient "Access is denied" errors
-          REM vp.exe renames its own parent directory; cmd.exe may report
-          REM "The system cannot find the path specified" on exit — ignore it.
-          for /L %%i in (1,1,3) do (
-            vp implode --yes || ver >NUL
-            if not exist "%USERPROFILE%\.vite-plus" goto implode_done
-            echo Retry %%i: vp implode failed, waiting 5s...
-            timeout /T 5 /NOBREAK >NUL
-          )
-          :implode_done
-          timeout /T 5 /NOBREAK >NUL
-          dir "%USERPROFILE%\"
-          if exist "%USERPROFILE%\.vite-plus" (
-            echo Error: .vite-plus still exists after implode
-            exit /b 1
-          )
-          pnpm bootstrap-cli:ci
-          vp --version
+    uses: ./.github/workflows/reusable-cli-e2e.yml
+    with:
+      runner: ${{ matrix.os }}
+      target: ${{ matrix.target }}
+      test-node: ${{ matrix.test-node }}
+
+  cli-e2e-test-windows:
+    needs: build-windows-cli
+    uses: ./.github/workflows/reusable-cli-e2e.yml
+    with:
+      runner: namespace-profile-windows-4c-8g
+      target: x86_64-pc-windows-msvc
+      test-node: 26.0.0
 
   # Build the native CLI and snapshot runner once per platform, then share
   # them across the E2E job and snapshot shards. Tar preserves permissions.
   build-cli-test-binaries:
     name: Build CLI test binaries (${{ matrix.target }})
-    needs:
-      - download-previous-rolldown-binaries
+    needs: detect-changes
+    if: needs.detect-changes.outputs.code-changed == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -989,12 +455,6 @@ jobs:
 
       - uses: ./.github/actions/setup-ci-node
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: rolldown-binaries
-          path: ./rolldown/packages/rolldown/src
-          merge-multiple: true
-
       - name: Build with upstream
         uses: ./.github/actions/build-upstream
         with:
@@ -1010,6 +470,14 @@ jobs:
             git diff
             exit 1
           fi
+
+      - name: Verify incremental CLI build
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          # The Rust CLI embeds this manifest; a no-op JS build must not touch it.
+          manifest_mtime=$(stat -c '%y' packages/cli/package.json)
+          pnpm --filter vite-plus build-ts
+          test "$manifest_mtime" = "$(stat -c '%y' packages/cli/package.json)"
 
       - name: Build snapshot test binaries
         run: cargo test -p vp_cli_snapshots --no-run --message-format=json > "$RUNNER_TEMP/snapshot-test-build.json"
@@ -1097,12 +565,6 @@ jobs:
 
       - uses: ./.github/actions/setup-ci-node
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: rolldown-binaries
-          path: ./rolldown/packages/rolldown/src
-          merge-multiple: true
-
       - uses: ./.github/actions/download-cli-test-binaries
         with:
           target: ${{ matrix.target }}
@@ -1168,7 +630,6 @@ jobs:
   cli-snapshot-test-windows:
     name: CLI snapshot test (Windows, shard ${{ matrix.shard }}/3)
     needs:
-      - download-previous-rolldown-binaries
       - build-windows-cli
       - build-windows-tests
     strategy:
@@ -1215,12 +676,6 @@ jobs:
           tool: cargo-nextest
 
       - uses: ./.github/actions/setup-ci-node
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: rolldown-binaries
-          path: ./rolldown/packages/rolldown/src
-          merge-multiple: true
 
       # See the cli-e2e-test job for details on the prebuilt binaries.
       - name: Download prebuilt Windows binaries
@@ -1355,8 +810,8 @@ jobs:
 
   cli-e2e-test-musl:
     name: CLI E2E test (Linux x64 musl)
-    needs:
-      - download-previous-rolldown-binaries
+    needs: detect-changes
+    if: needs.detect-changes.outputs.code-changed == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -1369,12 +824,6 @@ jobs:
           cache-key: cli-e2e-test-musl-ci
 
       - uses: ./.github/actions/setup-ci-node
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: rolldown-binaries
-          path: ./rolldown/packages/rolldown/src
-          merge-multiple: true
 
       # Cross-compile for musl on the glibc host
       - name: Build with upstream (musl)
@@ -1515,12 +964,6 @@ jobs:
 
       - uses: ./.github/actions/setup-ci-node
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: rolldown-binaries
-          path: ./rolldown/packages/rolldown/src
-          merge-multiple: true
-
       - uses: ./.github/actions/download-cli-test-binaries
         with:
           target: x86_64-unknown-linux-gnu
@@ -1627,12 +1070,6 @@ jobs:
 
       - uses: ./.github/actions/setup-ci-node
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: rolldown-binaries
-          path: ./rolldown/packages/rolldown/src
-          merge-multiple: true
-
       - uses: ./.github/actions/download-cli-test-binaries
         with:
           target: ${{ matrix.target }}
@@ -1711,6 +1148,7 @@ jobs:
     timeout-minutes: 20
     if: always()
     needs:
+      - detect-changes
       - docs-fmt
       - test
       - build-windows-tests
@@ -1719,6 +1157,7 @@ jobs:
       - test-musl
       - lint
       - cli-e2e-test
+      - cli-e2e-test-windows
       - cli-e2e-test-musl
       - certless-image-test
       - build-cli-test-binaries
