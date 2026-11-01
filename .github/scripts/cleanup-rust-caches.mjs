@@ -26,7 +26,13 @@ export function supersededRustCaches(caches, now = Date.now()) {
   const cutoff = now - unusedMilliseconds;
   return caches.filter(
     (cache) =>
-      Date.parse(cache.created_at) < newest.get(family(cache)) &&
+      // setup-rust no longer restores v1 after the Ubuntu image change.
+      // Retain the idle grace period for in-flight jobs and older PRs.
+      ((cache.ref === ref &&
+        /^v1-rust-.+-(?:Linux|Darwin|Windows_NT)-(?:x64|arm64)-[a-f0-9]{8}-[a-f0-9]{8}$/.test(
+          cache.key,
+        )) ||
+        Date.parse(cache.created_at) < newest.get(family(cache))) &&
       Date.parse(cache.created_at) < cutoff &&
       Date.parse(cache.last_accessed_at) < cutoff,
   );
@@ -48,7 +54,8 @@ export async function cleanupRustCaches({ github, context, core }, { dryRun = tr
       direction: 'desc',
     });
   const now = Date.now();
-  const candidates = supersededRustCaches(await list('v2-rust-'), now);
+  const caches = await Promise.all([list('v1-rust-'), list('v2-rust-')]);
+  const candidates = supersededRustCaches(caches.flat(), now);
   let count = 0;
   let bytes = 0;
   for (const candidate of candidates) {
