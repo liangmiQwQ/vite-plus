@@ -456,6 +456,8 @@ jobs:
     with:
       runner: ubuntu-24.04
       target: x86_64-unknown-linux-gnu
+      # Linux's longest shard takes roughly twice as long as macOS/Windows.
+      shards: '[1, 2, 3, 4]'
 
   cli-snapshot-test-macos:
     needs: build-cli-test-binaries-macos

@@ -9,6 +9,10 @@ on:
       target:
         required: true
         type: string
+      shards:
+        description: JSON array of consecutive shard numbers starting at 1.
+        type: string
+        default: '[1, 2, 3]'
 
 permissions:
   contents: read
@@ -22,11 +26,11 @@ env:
 
 jobs:
   test:
-    name: CLI snapshot tests (${{ inputs.target }}, shard ${{ matrix.shard }}/3)
+    name: CLI snapshot tests (${{ inputs.target }}, shard ${{ matrix.shard }})
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: ${{ fromJSON(inputs.shards) }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 20
     steps:
@@ -104,7 +108,7 @@ jobs:
           # process and VP_SNAP_SHARD partitioning as cargo test.
           CARGO_MANIFEST_DIR: ${{ github.workspace }}/crates/vp_cli_snapshots
           CARGO_BIN_EXE_vpt: ${{ github.workspace }}/target/snapshot-tests/vpt
-          VP_SNAP_SHARD: ${{ matrix.shard }}/3
+          VP_SNAP_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
           VP_SNAP_ARTIFACTS_DIR: ${{ runner.temp }}/snapshot-artifacts
 
       - name: Upload snapshot diagnostics and timings
