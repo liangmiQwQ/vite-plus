@@ -133,7 +133,10 @@ jobs:
           cache-key: test
           tools: just
 
+      # Linux already checks every target/feature with warnings denied in lint.
+      # Keep the platform-specific check on macOS, where Clippy does not run.
       - run: cargo check --all-targets --all-features
+        if: runner.os != 'Linux'
         env:
           RUSTFLAGS: '-D warnings --cfg tokio_unstable' # also update .cargo/config.toml
 
