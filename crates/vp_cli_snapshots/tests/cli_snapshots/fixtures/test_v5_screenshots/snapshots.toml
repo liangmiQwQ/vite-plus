@@ -6,6 +6,9 @@ steps = [{ argv = ["node", "verify.mjs"], timeout = 120000 }]
 
 [[case]]
 name = "headed_paths_and_dimensions"
+# Hosted macOS runners can time out closing the visible browser under contention.
+# Keep every assertion and isolate this case instead of accepting the warning.
+serial = true
 vp = "local"
 skip-platforms = ["linux", "windows"]
 env = { PLAYWRIGHT_BROWSERS_PATH = "0" }
