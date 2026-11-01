@@ -131,7 +131,7 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-          - os: namespace-profile-mac-default
+          - os: macos-15
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -248,7 +248,7 @@ jobs:
   test-windows:
     needs: build-windows-tests
     name: Test (Windows)
-    runs-on: namespace-profile-windows-4c-8g
+    runs-on: windows-2025
     timeout-minutes: 20
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
@@ -423,10 +423,10 @@ jobs:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             test-node: 22.18.0
-          - os: namespace-profile-mac-default
+          - os: macos-15
             target: aarch64-apple-darwin
             test-node: 24.11.0
-          - os: namespace-profile-windows-4c-8g
+          - os: windows-2025
             target: x86_64-pc-windows-msvc
             test-node: 26.0.0
     runs-on: ${{ matrix.os }}
@@ -974,7 +974,7 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-          - os: namespace-profile-mac-default
+          - os: macos-15
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -1058,12 +1058,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, namespace-profile-mac-default]
+        os: [ubuntu-24.04, macos-15]
         shard: [1, 2, 3]
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-          - os: namespace-profile-mac-default
+          - os: macos-15
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -1181,7 +1181,7 @@ jobs:
     # under a Session-0 service account with no interactive console, where the
     # ConPTY spawn blocked and every case timed out at 60s. #2126 (vite-task
     # bump) resolved that; revert to windows-latest if it recurs.
-    runs-on: namespace-profile-windows-4c-8g
+    runs-on: windows-2025
     timeout-minutes: 20
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
@@ -1603,7 +1603,7 @@ jobs:
             # vp's cache already, so vp never calls its HttpClient through sfw
             # in this test — leave the verification on there.
             vp_insecure_tls: '1'
-          - os: namespace-profile-mac-default
+          - os: macos-15
             target: aarch64-apple-darwin
             sfw_asset: sfw-free-macos-arm64
             vp_bin: vp
@@ -1613,7 +1613,7 @@ jobs:
           # https://github.com/nodejs/node/pull/61999 (Node 24.20.0 / 26.7.0).
           # SFW 1.15.2 embeds Node 24.9.0 and hits UV_HANDLE_CLOSING at shutdown.
           # VP_NODE_VERSION only changes the child runtime, not SFW's runtime.
-          # - os: namespace-profile-windows-4c-8g
+          # - os: windows-2025
           #   target: x86_64-pc-windows-msvc
           #   sfw_asset: sfw-free-windows-x86_64.exe
           #   # SFW spawns directly without PATHEXT, so use vp.exe on Windows.
