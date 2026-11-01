@@ -358,7 +358,8 @@ async function bundleRolldownPluginutils() {
 }
 
 async function bundleRolldown() {
-  await mkdir(join(projectDir, 'dist/rolldown'), { recursive: true });
+  // Replace the copied tree so earlier builds cannot leave stale hashed chunks.
+  await rm(join(projectDir, 'dist/rolldown'), { recursive: true, force: true });
 
   const { version: rolldownVersion }: { version: string } = JSON.parse(
     await readFile(join(rolldownSourceDir, 'package.json'), 'utf-8'),
