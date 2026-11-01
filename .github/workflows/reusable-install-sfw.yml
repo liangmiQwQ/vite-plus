@@ -1,0 +1,117 @@
+name: Socket Firewall install tests
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+      sfw-asset:
+        required: true
+        type: string
+      vp-bin:
+        type: string
+        default: vp
+      vp-insecure-tls:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  VP_NODE_DIST_MIRROR: ${{ vars.VP_NODE_DIST_MIRROR || 'https://nodejs.org/dist' }}
+  # Includes nodejs/node#61999 (first backported in Node 24.20.0).
+  # Override vp's project pins; sfw's embedded Node runtime is separate.
+  VP_NODE_VERSION: '24.22.1'
+
+jobs:
+  test:
+    name: Socket Firewall install test (${{ inputs.target }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+      - uses: ./.github/actions/clone
+
+      - uses: ./.github/actions/setup-ci-node
+
+      - uses: ./.github/actions/download-cli-test-binaries
+        with:
+          target: ${{ inputs.target }}
+
+      - name: Build with upstream
+        uses: ./.github/actions/build-upstream
+        with:
+          target: ${{ inputs.target }}
+          skip-native: true
+
+      - name: Build CLI
+        run: |
+          pnpm bootstrap-cli:ci
+          # Mirror the per-OS path form used by the `test` job (ci.yml ~L266):
+          # GITHUB_PATH on Windows needs a Windows-style path, otherwise child
+          # processes spawned by tools like sfw (which use CreateProcess and
+          # not bash's PATH munging) can't resolve `vp.exe`.
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo "$USERPROFILE\.vite-plus\bin" >> $GITHUB_PATH
+          else
+            echo "$HOME/.vite-plus/bin" >> $GITHUB_PATH
+          fi
+
+      - name: Prepare Node.js for SFW tests
+        # Download the selected runtime before entering sfw's proxy.
+        run: vp env exec node --version
+
+      - name: Download sfw
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sfw-bin"
+          # `--remove-on-error` (curl 7.83+) prevents leaving a zero-byte file
+          # on failure so the next step's `sfw --version` fails clearly rather
+          # than with "exec format error" on an empty binary.
+          curl --fail --location --remove-on-error --retry 3 --retry-delay 2 \
+            --output "$RUNNER_TEMP/sfw-bin/sfw${{ runner.os == 'Windows' && '.exe' || '' }}" \
+            "https://github.com/SocketDev/sfw-free/releases/latest/download/${{ inputs.sfw-asset }}"
+          if [[ "${{ runner.os }}" != "Windows" ]]; then
+            chmod +x "$RUNNER_TEMP/sfw-bin/sfw"
+          fi
+          echo "$RUNNER_TEMP/sfw-bin" >> "$GITHUB_PATH"
+
+      - name: Verify sfw and embedded Node versions
+        run: |
+          printf '%s\n' 'console.error("SFW embedded Node:", process.version, process.execPath);' \
+            > "$RUNNER_TEMP/sfw-node-version.cjs"
+          NODE_OPTIONS="--require=\"$RUNNER_TEMP/sfw-node-version.cjs\"" sfw --version
+
+      - name: Run `sfw vp install` against a real repo
+        # TODO(SocketDev/sfw-free#30, SocketDev/sfw-free#43): drop `vp_insecure_tls`
+        # from the Linux caller once sfw ships the EKU fix. Verified
+        # against sfw v1.11.0 (releases/latest as of 2026-05-28): on Linux,
+        # vp's HTTPS request to nodejs.org through sfw still fails with
+        # "invalid peer certificate: UnknownIssuer" because sfw's CA carries a
+        # present-but-empty Extended Key Usage extension that rustls rejects.
+        # macOS/Windows runners cache Node 22.18 in vp's directory, so vp
+        # doesn't call its HttpClient through sfw — leaving TLS verification
+        # enabled there gives us coverage that the bypass *isn't* used on
+        # those platforms.
+        env:
+          VP_INSECURE_TLS: ${{ inputs.vp-insecure-tls }}
+        run: |
+          set -euo pipefail
+          sfw "${{ inputs.vp-bin }}" env exec node --version
+          # Force the registry-fetch path: install a pinned pnpm globally so
+          # vp downloads it (and therefore traverses sfw) rather than reusing
+          # whatever's preinstalled on the runner.
+          sfw "${{ inputs.vp-bin }}" i -g pnpm@9.15.0
+          # Then exercise `vp install` inside a real repo, also through sfw.
+          git clone --depth 1 https://github.com/vitejs/vite.git "$RUNNER_TEMP/vite"
+          cd "$RUNNER_TEMP/vite"
+          sfw "${{ inputs.vp-bin }}" install --no-frozen-lockfile
