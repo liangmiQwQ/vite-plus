@@ -9,8 +9,12 @@ import { fileURLToPath } from 'node:url';
 
 const script = fileURLToPath(new URL('../prewarm-node.sh', import.meta.url));
 
-for (const failVersion of ['', '20']) {
-  await test(`prewarm waits for downloads and propagates failures (${failVersion || 'success'})`, async () => {
+for (const [failVersion, runnerOs] of [
+  ['', 'Linux'],
+  ['20', 'Linux'],
+  ['', 'Windows'],
+]) {
+  await test(`prewarm waits for downloads and propagates failures (${runnerOs}, ${failVersion || 'success'})`, async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'prewarm-node-'));
     try {
       const fixtures = join(cwd, 'crates/vp_cli_snapshots/tests/cli_snapshots');
@@ -32,7 +36,7 @@ echo "$VP_NODE_VERSION" >> completed
       );
       const result = spawnSync('bash', [script, vp], {
         cwd,
-        env: { ...process.env, FAIL_VERSION: failVersion },
+        env: { ...process.env, FAIL_VERSION: failVersion, RUNNER_OS: runnerOs },
         encoding: 'utf8',
         timeout: 10_000,
       });

@@ -18,7 +18,18 @@ prewarm_node latest
 # Runtime installation is locked per resolved version. Bound parallel downloads
 # so aliases can share an installation without serializing unrelated versions.
 pids=()
+download_limit=4
+# Concurrent extraction regressed Windows preparation in the hosted-runner
+# comparison. Keep its downloads serial while overlapping Unix downloads.
+if [[ "${RUNNER_OS:-}" == 'Windows' ]]; then
+  download_limit=1
+fi
+
 wait_for_downloads() {
+  # Bash 3.2 treats an empty array expansion as unset under `set -u`.
+  if [[ ${#pids[@]} -eq 0 ]]; then
+    return 0
+  fi
   local status=0
   for pid in "${pids[@]}"; do
     wait "$pid" || status=1
@@ -30,7 +41,7 @@ wait_for_downloads() {
 while IFS= read -r node_version; do
   prewarm_node "$node_version" &
   pids+=("$!")
-  if [[ ${#pids[@]} -eq 4 ]]; then
+  if [[ ${#pids[@]} -eq $download_limit ]]; then
     wait_for_downloads
   fi
 done < crates/vp_cli_snapshots/tests/cli_snapshots/node-versions.txt
