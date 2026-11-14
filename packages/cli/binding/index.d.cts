@@ -4290,6 +4290,12 @@ export declare namespace oxcNode {
   export function setTransformDeps(mode?: string | undefined | null): void;
   export function setTsconfigPath(path?: string | undefined | null): void;
   export function takeWatchDependencies(): Array<string>;
+  /** Reuse upstream's transform for the hook-free programmatic importer. */
+  export function transformModuleRunner(
+    path: string,
+    source: string | Uint8Array,
+    sync?: boolean | undefined | null,
+  ): ModuleRunnerOutput;
   /** A file transformed for the CommonJS loader. */
   export interface TransformOutput {
     source: string;

@@ -1,11 +1,12 @@
 //! The `oxcNode` namespace: thin forwarders to the vendored oxc-node, which the binding
 //! links with `default-features = false`, so it registers no NAPI exports of its own.
-//! Only what the `vpx <script>` loader in `packages/cli/src/script-*.ts` uses is exported.
+//! Exposes the script loader and the programmatic importer without registering hooks.
 //! `enableWatchReport` and `takeWatchDependencies` feed watch mode the tsconfig files
 //! oxc-node read and the paths a failed resolve looked for.
 
 use ::oxc_node::{
-    FrozenTsconfig, LoadContext, LoadFnOutput, OxcResolveOptions, ResolveContext, ResolveFnOutput,
+    FrozenTsconfig, LoadContext, LoadFnOutput, ModuleRunnerOutput, OxcResolveOptions,
+    ResolveContext, ResolveFnOutput,
 };
 use napi::{
     Either, Env, Result,
@@ -124,4 +125,14 @@ impl OxcTransformer {
         let output = self.inner.transform(path, source)?;
         Ok(TransformOutput { source: output.source(), source_map: output.source_map() })
     }
+}
+
+/// Reuse upstream's transform for the hook-free programmatic importer.
+#[napi(namespace = "oxcNode")]
+pub fn transform_module_runner(
+    path: String,
+    source: Either<String, &[u8]>,
+    sync: Option<bool>,
+) -> Result<ModuleRunnerOutput> {
+    ::oxc_node::transform_module_runner(path, source, sync)
 }

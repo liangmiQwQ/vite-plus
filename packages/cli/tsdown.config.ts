@@ -27,6 +27,33 @@ const vendoredWatcherPlugin = {
   },
 };
 
+// Bundle the upstream runner while using Vite+'s native addon and runtime helpers.
+const importerPath = fileURLToPath(
+  new URL('../../oxc-node/packages/core/importer.mjs', import.meta.url),
+);
+const vendoredImporterPlugin = {
+  name: 'vendored-oxc-node-importer',
+  resolveId(source: string, importer: string | undefined) {
+    if (importer && path.normalize(importer) === importerPath && source === './index.js') {
+      return fileURLToPath(new URL('./src/importer-binding.ts', import.meta.url));
+    }
+    return undefined;
+  },
+  transform(code: string, id: string) {
+    if (path.normalize(id) !== importerPath) {
+      return undefined;
+    }
+    const anchor = 'requireSelf.resolve(specifier)';
+    if (code.split(anchor).length !== 2) {
+      throw new Error('Review the upstream importer helper resolution before bundling.');
+    }
+    return code.replace(
+      anchor,
+      "requireSelf.resolve(specifier.replace(HELPER_PREFIX, '@oxc-project/runtime/helpers/'))",
+    );
+  },
+};
+
 /**
  * Rewrite `../versions.js` → `./versions.js` at resolve time.
  *
@@ -92,6 +119,7 @@ export default defineConfig([
       'script-esm-hooks': './src/script-esm-hooks.ts',
       // Public Node.js preload; reuses the emitted loader entries above/below.
       register: './src/register.ts',
+      importer: './src/importer.ts',
       // `vpx --watch`: oxc-node's watcher with that loader.
       'script-watch': './src/script-watch.ts',
       // Project-local `vpx` bin; kept apart from bin.js so it loads no binding.
@@ -113,7 +141,12 @@ export default defineConfig([
         mainFields: ['module', 'main'],
       },
     },
-    plugins: [fixVersionsPathPlugin, inlineLintStagedVersionPlugin, vendoredWatcherPlugin],
+    plugins: [
+      fixVersionsPathPlugin,
+      inlineLintStagedVersionPlugin,
+      vendoredWatcherPlugin,
+      vendoredImporterPlugin,
+    ],
   },
 
   // `vpx <script>` `--require` preload. CommonJS, so it loads before any user
