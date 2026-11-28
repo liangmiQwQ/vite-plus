@@ -135,7 +135,7 @@ What happens to each toolchain dependency, at a glance:
 | `@vitest/*`                    | Directly installed lockstep packages aligned to the bundled Vitest version (see [Vitest Ecosystem Packages](#vitest-ecosystem-packages)).                                   |
 | `@voidzero-dev/vite-plus-test` | Removed everywhere: dependencies, overrides, resolutions, and catalog aliases. Imports are rewritten to the current `vite-plus/test*` surface.                              |
 
-Vite+ bundles Oxlint, Oxfmt, tsdown, `@vitest/browser`, and `@vitest/browser-preview`, so migration removes their `devDependencies` entries. A package that also lists one of them in `dependencies`, `optionalDependencies`, or `peerDependencies` keeps every declaration of it, including the development copy. Such a package publishes or runs the tool, and its consumers may not use Vite+. A tsdown plugin, for example, keeps `tsdown` as a peer and as the devDependency it tests against. A kept `catalog:` reference becomes the range its catalog entry pointed at, because migration still removes that entry.
+Vite+ bundles Oxlint, Oxfmt, tsdown, `@vitest/browser`, and `@vitest/browser-preview`, so migration removes their `devDependencies` entries. A package that also lists one of them in `dependencies`, `optionalDependencies`, or `peerDependencies` keeps every declaration of it, including the development copy. Such a package publishes or runs the tool, and its consumers may not use Vite+. A tsdown plugin, for example, keeps `tsdown` as a peer and as the devDependency it tests against. Migration also keeps the catalog entries for these declarations, so a kept `catalog:` reference still resolves.
 
 ### Version Selection
 

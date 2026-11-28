@@ -5634,7 +5634,8 @@ describe('rewriteStandaloneProject pnpm workspace yaml', () => {
     expect(yaml).toHaveProperty(['catalogs', 'vite7', 'vite-plus'], 'latest');
     const testCatalog = fixtureObject(yaml, 'catalogs', 'test');
     expect(testCatalog.vitest).toBeUndefined();
-    expect(testCatalog.tsdown).toBeUndefined();
+    // The tsdown peer survives migration, so its catalog entry does too.
+    expect(testCatalog.tsdown).toBe('^0.1.0');
     expect(testCatalog['vite-plus']).toBeUndefined();
 
     const pkg = readJson(path.join(tmpDir, 'package.json'));
@@ -5645,7 +5646,7 @@ describe('rewriteStandaloneProject pnpm workspace yaml', () => {
     // catalog entry to its public range before pruning it so the peer cannot
     // dangle after migration.
     expect(pkg).toHaveProperty(['peerDependencies', 'vitest'], '^4.0.0');
-    expect(pkg).toHaveProperty(['peerDependencies', 'tsdown'], '^0.1.0');
+    expect(pkg).toHaveProperty(['peerDependencies', 'tsdown'], 'catalog:test');
   });
 
   // A tsdown plugin builds and tests against the tsdown its consumers provide.
@@ -5666,6 +5667,25 @@ describe('rewriteStandaloneProject pnpm workspace yaml', () => {
     const pkg = readJson(packageJsonPath);
     expect(pkg.peerDependencies).toEqual({ tsdown: '^0.23.0' });
     expect(pkg.devDependencies).toEqual({ tsdown: '^0.23.0', 'vite-plus': 'catalog:' });
+    checkBootstrapPass(workspace, false);
+    expect(readJson(packageJsonPath)).toEqual(pkg);
+  });
+
+  // Vitest alignment turns the range into `catalog:`, so the kept runtime dependency needs its catalog entry.
+  it('adds a catalog entry for an aligned bundled package kept at runtime', () => {
+    const packageJsonPath = path.join(tmpDir, 'package.json');
+    writePkgAt(tmpDir, { name: 'test', dependencies: { '@vitest/browser-preview': '^4.1.0' } });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-workspace.yaml'), 'catalog:\n  vite: ^7.0.0\n');
+    const workspace = makeWorkspaceInfo(tmpDir, PackageManager.pnpm);
+
+    rewriteStandaloneProject(tmpDir, workspace, true, true);
+
+    const pkg = readJson(packageJsonPath);
+    expect(pkg).toHaveProperty(['dependencies', '@vitest/browser-preview'], 'catalog:');
+    expect(readYamlObject(path.join(tmpDir, 'pnpm-workspace.yaml'))).toHaveProperty(
+      ['catalog', '@vitest/browser-preview'],
+      VITEST_VERSION,
+    );
     checkBootstrapPass(workspace, false);
     expect(readJson(packageJsonPath)).toEqual(pkg);
   });

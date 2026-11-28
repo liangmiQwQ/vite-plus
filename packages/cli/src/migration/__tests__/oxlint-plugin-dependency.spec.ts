@@ -589,8 +589,7 @@ describe('Oxlint plugin dependency cleanup', () => {
     expect(ensureVitePlusBootstrap(workspace).changed).toBe(false);
     expect(readJsonFile(packageJsonPath).dependencies).toEqual({ oxlint: '^1.0.0' });
 
-    // An existing Vite+ project can still reference a catalog entry that the
-    // bootstrap deletes, so the kept dependency takes the concrete range.
+    // A kept `catalog:` reference keeps the catalog entry it points at.
     const pkg = readJsonFile(packageJsonPath);
     writeJsonFile(packageJsonPath, { ...pkg, dependencies: { oxlint: 'catalog:' } });
     fs.writeFileSync(
@@ -600,11 +599,10 @@ describe('Oxlint plugin dependency cleanup', () => {
         .replace('catalog:\n', 'catalog:\n  oxlint: ^1.0.0\n'),
     );
 
-    expect(pending()).toBe(true);
-    expect(ensureVitePlusBootstrap(workspace).changed).toBe(true);
-    expect(readJsonFile(packageJsonPath).dependencies).toEqual({ oxlint: '^1.0.0' });
-    expect(fs.readFileSync(workspaceYamlPath, 'utf8')).not.toContain('oxlint: ^1.0.0');
     expect(pending()).toBe(false);
+    expect(ensureVitePlusBootstrap(workspace).changed).toBe(false);
+    expect(readJsonFile(packageJsonPath).dependencies).toEqual({ oxlint: 'catalog:' });
+    expect(fs.readFileSync(workspaceYamlPath, 'utf8')).toContain('oxlint: ^1.0.0');
   });
 
   it('keeps optional oxlint as a runtime dependency', () => {

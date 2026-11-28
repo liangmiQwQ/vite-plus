@@ -498,29 +498,13 @@ export function declaresRuntimeDependency(pkg: DependencyBag, name: string): boo
 export function removeBundledDevDependencies(
   pkg: DependencyBag,
   names: ReadonlyArray<string>,
-  catalogDependencyResolver?: CatalogDependencyResolver,
 ): boolean {
   let declared = false;
   for (const name of names) {
     declared ||= pkg.devDependencies?.[name] !== undefined;
+    // A kept `catalog:` reference still resolves because `collectCatalogAdditions` keeps its entry.
     if (!declaresRuntimeDependency(pkg, name)) {
       delete pkg.devDependencies?.[name];
-      continue;
-    }
-    // Catalog cleanup deletes the bundled entry, so a kept reference takes the range it pointed at.
-    for (const dependencies of [
-      pkg.devDependencies,
-      pkg.dependencies,
-      pkg.optionalDependencies,
-      pkg.peerDependencies,
-    ]) {
-      const current = dependencies?.[name];
-      const resolved = current?.startsWith('catalog:')
-        ? catalogDependencyResolver?.(current, name)
-        : undefined;
-      if (dependencies && resolved) {
-        dependencies[name] = resolved;
-      }
     }
   }
   return declared;

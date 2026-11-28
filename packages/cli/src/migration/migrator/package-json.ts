@@ -67,8 +67,8 @@ export function rewritePackageJson(
   // Installed dependency metadata can reveal required Vitest peers whose
   // package names do not include "vitest".
   requiredVitestPeer = false,
-  // An installed provider references the shared catalog entry added for a sibling.
-  browserCatalogAdditions: ReadonlySet<string> = new Set(),
+  // Catalog entries that migration keeps or adds. An installed provider references one added for a sibling.
+  catalogAdditions: ReadonlySet<string> = new Set(),
   // Bundled browser packages that this package still imports.
   retainedBrowserPackages?: ReadonlySet<string>,
 ): Record<string, string | Array<string>> | null {
@@ -192,13 +192,7 @@ export function rewritePackageJson(
   if (pkg.devDependencies?.[OXLINT_PLUGINS_PACKAGE] !== undefined && !packageOwnsOxlintApi(pkg)) {
     needVitePlus = true;
   }
-  if (
-    removeBundledDevDependencies(
-      pkg,
-      bundledPackagesToRemove(retainedBrowserPackages),
-      catalogDependencyResolver,
-    )
-  ) {
+  if (removeBundledDevDependencies(pkg, bundledPackagesToRemove(retainedBrowserPackages))) {
     needVitePlus = true;
   }
   // Official opt-in providers remain project dependencies. Align their versions
@@ -233,7 +227,7 @@ export function rewritePackageJson(
           provider,
           installGroupEntry.dependencyField,
           packageManager,
-          browserCatalogAdditions.has(provider)
+          catalogAdditions.has(provider)
             ? supportCatalog && packageManager !== PackageManager.bun
             : supportCatalog,
           catalogDependencyResolver,

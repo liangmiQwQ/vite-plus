@@ -76,6 +76,8 @@ import {
   resolveProviderPeerSpec,
   OPT_IN_BROWSER_PROVIDERS,
   bundledPackagesToRemove,
+  declaresRuntimeDependency,
+  REMOVE_PACKAGES,
   removeBundledDevDependencies,
   VITEST_IS_MANAGED_OVERRIDE,
   managedOverrideKey,
@@ -300,8 +302,8 @@ function reconcileVitePlusBootstrapPackage(
   supportCatalog: boolean,
   ensureVitePlus: boolean,
   catalogDependencyResolver?: CatalogDependencyResolver,
-  // An installed provider references the shared catalog entry added for a sibling.
-  browserCatalogAdditions: ReadonlySet<string> = new Set(),
+  // Catalog entries that migration keeps or adds. An installed provider references one added for a sibling.
+  catalogAdditions: ReadonlySet<string> = new Set(),
   retainedImportDependencies?: RetainedImportDependencies,
 ): boolean {
   const before = JSON.stringify(pkg);
@@ -365,7 +367,7 @@ function reconcileVitePlusBootstrapPackage(
           provider,
           installGroupEntry.dependencyField,
           packageManager,
-          browserCatalogAdditions.has(provider)
+          catalogAdditions.has(provider)
             ? supportCatalog && packageManager !== PackageManager.bun
             : supportCatalog,
           catalogDependencyResolver,
@@ -396,7 +398,6 @@ function reconcileVitePlusBootstrapPackage(
   removeBundledDevDependencies(
     pkg,
     bundledPackagesToRemove(retainedImportDependencies?.browser.get(projectPath)),
-    catalogDependencyResolver,
   );
 
   if (usesAnyOptInProvider && packageManager === PackageManager.npm) {
@@ -481,8 +482,11 @@ export function bootstrapProjectPaths(
   return getWorkspaceProjectPaths({ rootDir, packages });
 }
 
-/** Catalog entries needed for retained browser imports and newly installed providers. */
-export function collectBrowserCatalogAdditions(
+/**
+ * Catalog entries needed for retained browser imports, newly installed
+ * providers, and bundled packages that a package declares at runtime.
+ */
+export function collectCatalogAdditions(
   rootDir: string,
   packages?: Array<WorkspacePackage>,
   retainedBrowserPackages?: RetainedImportDependencies['browser'],
@@ -501,6 +505,12 @@ export function collectBrowserCatalogAdditions(
       continue;
     }
     const pkg = readJsonFile(packageJsonPath) as BootstrapPackageJson;
+    // Migration keeps these declarations, and a `catalog:` reference among them still needs its entry.
+    for (const name of REMOVE_PACKAGES) {
+      if (declaresRuntimeDependency(pkg, name)) {
+        names.add(name);
+      }
+    }
     const sourceModes =
       precomputedSourceModes?.get(packagePath) ?? collectProviderSourceModes(packagePath);
     const installGroups = [pkg.devDependencies, pkg.dependencies, pkg.optionalDependencies];
@@ -665,7 +675,7 @@ export function detectVitePlusBootstrapPending(
   // Match the actual reconcile so an already-installed provider whose catalog
   // entry the migration will add is reported pending (its spec must become
   // `catalog:`). See #2005.
-  const browserCatalogAdditions = collectBrowserCatalogAdditions(
+  const catalogAdditions = collectCatalogAdditions(
     projectPath,
     packages,
     retainedImportDependencies?.browser,
@@ -686,7 +696,7 @@ export function detectVitePlusBootstrapPending(
         supportCatalog,
         index === 0,
         catalogDependencyResolver,
-        browserCatalogAdditions,
+        catalogAdditions,
         retainedImportDependencies,
       )
     ) {
@@ -1011,7 +1021,7 @@ export function ensureVitePlusBootstrap(
     projectPath,
     workspaceInfo.packages,
   );
-  const browserCatalogAdditions = collectBrowserCatalogAdditions(
+  const catalogAdditions = collectCatalogAdditions(
     projectPath,
     workspaceInfo.packages,
     retainedImportDependencies?.browser,
@@ -1042,7 +1052,7 @@ export function ensureVitePlusBootstrap(
         usesVitest,
         vitestEcosystemPackages,
         false,
-        browserCatalogAdditions,
+        catalogAdditions,
         usesWebdriverio,
         workspaceInfo.downloadPackageManager.version,
       );
@@ -1058,7 +1068,7 @@ export function ensureVitePlusBootstrap(
       supportCatalog,
       true,
       catalogDependencyResolver,
-      browserCatalogAdditions,
+      catalogAdditions,
       retainedImportDependencies,
     );
 
@@ -1158,7 +1168,7 @@ export function ensureVitePlusBootstrap(
           supportCatalog,
           false,
           catalogDependencyResolver,
-          browserCatalogAdditions,
+          catalogAdditions,
           retainedImportDependencies,
         );
         if (
@@ -1217,7 +1227,7 @@ export function ensureVitePlusBootstrap(
           usesVitest,
           vitestEcosystemPackages,
           true,
-          browserCatalogAdditions,
+          catalogAdditions,
           usesWebdriverio,
           workspaceInfo.downloadPackageManager.version,
         );
@@ -1245,7 +1255,7 @@ export function ensureVitePlusBootstrap(
       projectPath,
       usesVitest,
       vitestEcosystemPackages,
-      browserCatalogAdditions,
+      catalogAdditions,
       supportCatalog,
       yarnSupportsPreapprovedPackages(workspaceInfo.downloadPackageManager.version),
     );
@@ -1259,7 +1269,7 @@ export function ensureVitePlusBootstrap(
       vitestEcosystemPackages,
       usesWebdriverio,
       workspaceInfo.downloadPackageManager.version,
-      browserCatalogAdditions,
+      catalogAdditions,
     );
     const after = fs.readFileSync(packageJsonPath, 'utf8');
     result.packageJson = result.packageJson || before !== after;
